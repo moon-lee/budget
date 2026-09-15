@@ -5,6 +5,7 @@ import { listPotHistory } from '../dao/pots.js';
 import { balanceCheck } from '../services/budget-service.js';
 import { listCurrentPots } from '../dao/pots.js';
 import { listCurrentFlows } from '../dao/flows.js';
+import { CANONICAL_SECTION_ORDER, normalizeSectionOrder, type OverviewSectionId } from './overview-sections.js';
 
 const Base = typeof HTMLElement !== 'undefined' ? LitElement : (class {} as unknown as typeof LitElement);
 
@@ -51,6 +52,7 @@ export class BudgetOverviewView extends Base {
     .add-menu .sub{display:block;font-size:var(--ff-font-sm);color:var(--ff-text-muted,#858585)}
     .two-col{display:grid;grid-template-columns:1fr 1fr;gap:0 16px;align-items:start}
     @media (max-width:900px){.two-col{grid-template-columns:1fr}}
+    .order-stack{display:flex;flex-direction:column}
     .sel-bar{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:var(--ff-font-sm);color:var(--ff-text-muted,#858585)}
     .sel-bar .count{font-weight:700;color:var(--ff-text,#d4d4d4)}
     .sel-bar .btn-link:disabled{opacity:.4;cursor:not-allowed;text-decoration:none}
@@ -74,6 +76,7 @@ export class BudgetOverviewView extends Base {
   showMoves = true;
   moveDay: 'all' | 'friday' | 'sunday' = 'all';
   addOpen = false;
+  sectionOrder: OverviewSectionId[] = [...CANONICAL_SECTION_ORDER];
   selSavings = new Set<string>();
   selExpenses = new Set<string>();
   selMoves = new Set<string>();
@@ -117,6 +120,12 @@ export class BudgetOverviewView extends Base {
       this.error = String(e?.message || e);
     }
     (this as any).requestUpdate?.();
+  }
+
+  private sectionIndex(id: OverviewSectionId): number {
+    const order = normalizeSectionOrder(this.sectionOrder);
+    const i = order.indexOf(id);
+    return i < 0 ? 99 : i;
   }
 
   private emit(name: string, detail?: unknown): void {
@@ -272,6 +281,7 @@ export class BudgetOverviewView extends Base {
     return html`
       <div class="view-scroll">
       <div class="topbar"><span class="crumb-current">Budget · Overview</span><div class="spacer"></div>
+        <button class="filter-btn" @click=${() => this.emit('reorder-sections')}>⇅ Sections</button>
         <div class="add-wrap">
           <button class="filter-btn" @click=${() => { this.addOpen = !this.addOpen; (this as any).requestUpdate?.(); }}>Add ▾</button>
           ${this.addOpen ? html`<div class="add-menu">
@@ -283,7 +293,8 @@ export class BudgetOverviewView extends Base {
       <div class="view-container"><div class="view-container-inner">
         <h1>Budget Overview</h1>
         ${this.error ? html`<p class="field-error">Error: ${this.error}</p>` : ''}
-        <div class="section"><div class="section-header"><h3 class="section-title">Income & balance</h3>
+        <div class="order-stack">
+        <div class="section" style="order:${this.sectionIndex('income')}"><div class="section-header"><h3 class="section-title">Income & balance</h3>
           ${this.incomeManual ? html`<span class="tag">Edited by hand</span>` : html`<span class="tag">Live from Salary</span>`}</div>
           <div class="cards">
             <div class="card"><div class="k">In / week</div><div class="v">${BudgetOverviewView.aud(b.income_weekly)}</div>
@@ -296,12 +307,12 @@ export class BudgetOverviewView extends Base {
               <div class="s">${reconciled ? 'Matches planned out' : `${BudgetOverviewView.aud(Math.abs(gap))}/wk ${gap > 0 ? 'unallocated' : 'over-moved'}`}</div></div>
           </div>
         </div>
-        <div class="two-col">
+        <div class="two-col" style="order:${this.sectionIndex('plans')}">
         ${this.summaryHtml('Savings pots', 'Pot', savings, this.showSavings, () => { this.showSavings = !this.showSavings; (this as any).requestUpdate?.(); }, this.selSavings, 'pot-edit-request', 'pot-archive-request', 'pot-archive-bulk', 'savings')}
         ${this.summaryHtml('Expense lines', 'Line', expenses, this.showExpenses, () => { this.showExpenses = !this.showExpenses; (this as any).requestUpdate?.(); }, this.selExpenses, 'pot-edit-request', 'pot-archive-request', 'pot-archive-bulk', 'expenses')}
         </div>
-        ${this.movesHtml()}
-        ${this.trace.length ? html`<div class="section">
+        <div style="order:${this.sectionIndex('moves')}">${this.movesHtml()}</div>
+        ${this.trace.length ? html`<div class="section" style="order:${this.sectionIndex('trace')}">
           <button class="group-head ${this.showTrace ? 'open' : ''}" @click=${() => { this.showTrace = !this.showTrace; (this as any).requestUpdate?.(); }} aria-expanded=${this.showTrace ? 'true' : 'false'}>
             <span class="chev"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
             <span class="t">Plan trace</span>
@@ -316,6 +327,7 @@ export class BudgetOverviewView extends Base {
             </tr>`)}</tbody>
           </table></div>` : ''}
         </div>` : ''}
+        </div>
       </div></div>
       </div>
     `;

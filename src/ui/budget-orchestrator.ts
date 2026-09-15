@@ -4,6 +4,7 @@ import { createAccount, updateAccount, setAccountActive } from '../dao/accounts.
 import { archiveFlow, saveFlow } from '../dao/flows.js';
 import { saveIncome } from '../dao/income.js';
 import { archivePot, savePot } from '../dao/pots.js';
+import { CANONICAL_SECTION_ORDER, normalizeSectionOrder, type OverviewSectionId } from './overview-sections.js';
 import { ExtensionLogger } from 'finance-logger';
 
 const Base = typeof HTMLElement !== 'undefined' ? LitElement : (class {} as unknown as typeof LitElement);
@@ -13,7 +14,8 @@ type Tag =
   | 'budget-overview'
   | 'budget-accounts'
   | 'budget-pot-form'
-  | 'budget-flow-form';
+  | 'budget-flow-form'
+  | 'reorder-sections-modal';
 
 /**
  * Single-tab orchestrator (mortgage shape): view state + pushFinance +
@@ -29,6 +31,7 @@ export class BudgetOrchestrator extends Base {
   error = '';
   private formEdit: any = null;
   private returnTo: Tag = 'budget-overview';
+  sectionOrder: OverviewSectionId[] = [...CANONICAL_SECTION_ORDER];
 
   async setFinance(f: any): Promise<void> {
     this.finance = f;
@@ -44,6 +47,10 @@ export class BudgetOrchestrator extends Base {
     else if (v === 'budget-flows') this.view = 'budget-overview'; // folded into Overview (Pay-day moves group)
     else if (v === 'budget-accounts') this.view = 'budget-accounts';
     this.formEdit = null;
+    try {
+      const saved = await f.settings.get('budget.sectionOrder');
+      this.sectionOrder = normalizeSectionOrder(typeof saved === 'string' ? JSON.parse(saved) : saved);
+    } catch { this.sectionOrder = [...CANONICAL_SECTION_ORDER]; }
     await this.pushFinance();
   }
 
@@ -62,6 +69,11 @@ export class BudgetOrchestrator extends Base {
     (this as any).requestUpdate?.();
     await Promise.resolve();
     const c = this.child() as any;
+    if (c && this.finance) {
+      try {
+        if ('sectionOrder' in c) c.sectionOrder = [...this.sectionOrder];
+      } catch { /* child without section order */ }
+    }
     if (c && this.finance && typeof c.setFinance === 'function') {
       try {
         if ((this.view === 'budget-pot-form' || this.view === 'budget-flow-form') && typeof c.init === 'function') {
@@ -112,6 +124,9 @@ export class BudgetOrchestrator extends Base {
     on('account-create', (d: any) => void this.onAccountCreate(d));
     on('account-edit', (d: any) => void this.onAccountEdit(d));
     on('account-toggle', (d: any) => void this.onAccountToggle(d));
+    on('reorder-sections', () => this.navigate('reorder-sections-modal'));
+    on('section-order-cancel', () => this.navigate('budget-overview'));
+    on('section-order-change', (d: any) => void this.onSectionOrderChange(d));
   }
 
   private async prefillPot(key: string): Promise<any> {
@@ -262,6 +277,18 @@ export class BudgetOrchestrator extends Base {
     await this.refresh();
   }
 
+  private async onSectionOrderChange(order: unknown): Promise<void> {
+    this.sectionOrder = normalizeSectionOrder(order);
+    if (this.finance) {
+      try {
+        await this.finance.settings.set('budget.sectionOrder', JSON.stringify(this.sectionOrder));
+      } catch (e: any) {
+        log.error('persist sectionOrder failed', { error: String(e?.message || e) });
+      }
+    }
+    this.navigate('budget-overview');
+  }
+
   override render(): unknown {
     if (typeof HTMLElement === 'undefined') return html``;
     return html`
@@ -271,6 +298,7 @@ export class BudgetOrchestrator extends Base {
       ${this.view === 'budget-accounts' ? html`<budget-accounts id="child"></budget-accounts>` : ''}
       ${this.view === 'budget-pot-form' ? html`<budget-pot-form id="child"></budget-pot-form>` : ''}
       ${this.view === 'budget-flow-form' ? html`<budget-flow-form id="child"></budget-flow-form>` : ''}
+      ${this.view === 'reorder-sections-modal' ? html`<reorder-sections-modal id="child" .sectionOrder=${this.sectionOrder}></reorder-sections-modal>` : ''}
       </div>
     `;
   }
