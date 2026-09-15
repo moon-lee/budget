@@ -29,12 +29,12 @@ export async function accountById(finance: any): Promise<Map<number, AccountRow>
   return new Map((await listAccounts(finance)).map((a) => [a.id, a]));
 }
 
-/** Display label for a pot/flow row: "Bank Label" or "Label" (or null when no account). */
+/** Display label for a pot/flow row: "Bank · Label" or "Label" (or null when no account). */
 export function resolveAccountLabel(accounts: Map<number, AccountRow>, accountId: number | null | undefined): string | null {
   if (accountId == null) return null;
   const a = accounts.get(Number(accountId));
   if (!a) return null;
-  return a.bank ? `${a.bank} ${a.label}` : a.label;
+  return a.bank ? `${a.bank} · ${a.label}` : a.label;
 }
 
 export async function createAccount(
