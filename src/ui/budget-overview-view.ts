@@ -72,6 +72,8 @@ export class BudgetOverviewView extends Base {
   selSavings = new Set<string>();
   selExpenses = new Set<string>();
   selMoves = new Set<string>();
+  /** Bumped on every selection change so checkbox bindings re-apply. */
+  private selRev = 0;
 
   async setFinance(f: any): Promise<void> {
     this.finance = f;
@@ -85,6 +87,10 @@ export class BudgetOverviewView extends Base {
       this.pots = await listCurrentPots(this.finance);
       this.flows = await listCurrentFlows(this.finance);
       this.accountLabels = await accountById(this.finance);
+      // Drop selections for rows that no longer exist (e.g. after archive).
+      this.pruneSel(this.selSavings, this.pots.filter((p: any) => p.kind === 'saving').map((p: any) => p.pot_key));
+      this.pruneSel(this.selExpenses, this.pots.filter((p: any) => p.kind === 'expense').map((p: any) => p.pot_key));
+      this.pruneSel(this.selMoves, this.flows.map((f: any) => f.flow_key));
       // income source tag: live `pay` present and positive → Salary, else manual (spec §6)
       this.incomeManual = true;
       try {
@@ -131,16 +137,35 @@ export class BudgetOverviewView extends Base {
     return Math.round(rows.reduce((n: number, p: any) => n + Number(p.weekly_amount || 0), 0) * 100) / 100;
   }
 
+  private bumpSel(): void {
+    this.selRev++;
+    (this as any).requestUpdate?.();
+  }
+
   private toggleSel(set: Set<string>, key: string): void {
     if (set.has(key)) set.delete(key);
     else set.add(key);
-    (this as any).requestUpdate?.();
+    this.bumpSel();
   }
 
   private toggleAll(set: Set<string>, rows: any[], keyOf: (r: any) => string): void {
     if (rows.every((r) => set.has(keyOf(r)))) set.clear();
     else rows.forEach((r) => set.add(keyOf(r)));
-    (this as any).requestUpdate?.();
+    this.bumpSel();
+  }
+
+  private clearSel(set: Set<string>): void {
+    set.clear();
+    this.bumpSel();
+  }
+
+  private pruneSel(set: Set<string>, validKeys: string[]): void {
+    const valid = new Set(validKeys);
+    let changed = false;
+    for (const k of [...set]) {
+      if (!valid.has(k)) { set.delete(k); changed = true; }
+    }
+    if (changed) this.selRev++;
   }
 
   /** Selection action bar: Edit (exactly 1) + Archive (n). */
@@ -150,7 +175,7 @@ export class BudgetOverviewView extends Base {
     return html`<div class="sel-bar"><span class="count">${sel.size} selected</span>
       <button class="btn-link" ?disabled=${sel.size !== 1} title=${sel.size !== 1 ? 'Select one row to edit' : ''} @click=${() => { if (sel.size === 1) this.emit(editEvent, { key: keys[0] }); }}>Edit</button>
       <button class="btn-link" @click=${() => this.emit(sel.size === 1 ? archiveEvent : bulkEvent, sel.size === 1 ? { key: keys[0] } : { keys })}>Archive${sel.size > 1 ? ` (${sel.size})` : ''}</button>
-      <button class="btn-link" @click=${() => { sel.clear(); (this as any).requestUpdate?.(); }}>Clear</button>
+      <button class="btn-link" @click=${() => this.clearSel(sel)}>Clear</button>
     </div>`;
   }
 
@@ -166,9 +191,9 @@ export class BudgetOverviewView extends Base {
         <span class="sum"><b>${BudgetOverviewView.aud(total)}</b> / week · ${BudgetOverviewView.aud(total * 52)} / year</span>
       </button>
       ${shown ? html`${this.selBarHtml(sel, editEvent, archiveEvent, bulkEvent)}
-      <div class="table-wrap"><table class="hist-table slim">
+      <div class="table-wrap"><table class="hist-table slim" data-selrev=${this.selRev}>
         <colgroup><col style="width:8%"><col style="width:36%"><col style="width:32%"><col style="width:24%"></colgroup>
-        <thead><tr><th><input type="checkbox" ?checked=${allOn} @change=${() => this.toggleAll(sel, rows, keyOf)} aria-label="Select all"></th><th>${colLabel}</th><th>Account</th><th class="num">Weekly</th></tr></thead>
+        <thead><tr><th><input type="checkbox" ?checked=${allOn} .checked=${allOn} @change=${() => this.toggleAll(sel, rows, keyOf)} aria-label="Select all"></th><th>${colLabel}</th><th>Account</th><th class="num">Weekly</th></tr></thead>
         <tbody>${rows.map((p) => this.rowHtml(p, sel))}</tbody>
       </table></div>` : ''}
     </div>`;
@@ -178,7 +203,7 @@ export class BudgetOverviewView extends Base {
     const acct = resolveAccountLabel(this.accountLabels, p.account_id);
     const checked = sel?.has(p.pot_key) ?? false;
     return html`<tr class=${checked ? 'selected' : ''}>
-      ${sel ? html`<td><input type="checkbox" ?checked=${checked} @change=${() => this.toggleSel(sel, p.pot_key)} aria-label="Select ${p.label}"></td>` : ''}
+      ${sel ? html`<td><input type="checkbox" ?checked=${checked} .checked=${checked} @change=${() => this.toggleSel(sel, p.pot_key)} aria-label="Select ${p.label}"></td>` : ''}
       <td>${p.label}</td><td>${acct ?? '—'}</td>
       <td class="num">${BudgetOverviewView.aud(p.weekly_amount)}</td>
     </tr>`;
@@ -187,7 +212,7 @@ export class BudgetOverviewView extends Base {
   private moveRowHtml(f: any) {
     const checked = this.selMoves.has(f.flow_key);
     return html`<tr class=${checked ? 'selected' : ''}>
-      <td><input type="checkbox" ?checked=${checked} @change=${() => this.toggleSel(this.selMoves, f.flow_key)} aria-label="Select ${f.label}"></td>
+      <td><input type="checkbox" ?checked=${checked} .checked=${checked} @change=${() => this.toggleSel(this.selMoves, f.flow_key)} aria-label="Select ${f.label}"></td>
       <td>${f.label}</td><td>${f.day === 'friday' ? 'Friday' : 'Sunday'}</td><td>${resolveAccountLabel(this.accountLabels, f.account_id) ?? '—'}</td>
       <td class="num">${BudgetOverviewView.aud(f.weekly_amount)}</td>
     </tr>`;
@@ -214,9 +239,9 @@ export class BudgetOverviewView extends Base {
         <button class="chip ${this.moveDay === 'sunday' ? 'on' : ''}" @click=${() => setDay('sunday')}>Sunday</button>
       </div>
       ${this.selBarHtml(this.selMoves, 'flow-edit-request', 'flow-archive-request', 'flow-archive-bulk')}
-      <div class="table-wrap"><table class="hist-table">
+      <div class="table-wrap"><table class="hist-table" data-selrev=${this.selRev}>
         <colgroup><col style="width:6%"><col style="width:22%"><col style="width:12%"><col style="width:38%"><col style="width:22%"></colgroup>
-        <thead><tr><th><input type="checkbox" ?checked=${rows.length > 0 && rows.every((f: any) => this.selMoves.has(f.flow_key))} @change=${() => this.toggleAll(this.selMoves, rows, (f: any) => f.flow_key)} aria-label="Select all"></th><th>Move</th><th>Day</th><th>Account</th><th class="num">Weekly</th></tr></thead>
+        <thead><tr><th><input type="checkbox" ?checked=${rows.length > 0 && rows.every((f: any) => this.selMoves.has(f.flow_key))} .checked=${rows.length > 0 && rows.every((f: any) => this.selMoves.has(f.flow_key))} @change=${() => this.toggleAll(this.selMoves, rows, (f: any) => f.flow_key)} aria-label="Select all"></th><th>Move</th><th>Day</th><th>Account</th><th class="num">Weekly</th></tr></thead>
         <tbody>${rows.map((f) => this.moveRowHtml(f))}</tbody>
       </table></div>` : ''}
     </div>`;
