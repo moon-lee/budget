@@ -54,6 +54,8 @@ export class BudgetOverviewView extends Base {
     .sel-bar .count{font-weight:700;color:var(--ff-text,#d4d4d4)}
     .sel-bar .btn-link:disabled{opacity:.4;cursor:not-allowed;text-decoration:none}
     .sel-bar .btn-link:disabled:hover{text-decoration:none}
+    .sel-bar .ask{font-weight:700;color:var(--ff-danger,#f48771)}
+    .sel-bar .btn-link.danger{color:var(--ff-danger,#f48771)}
     .hist-table input[type=checkbox]{accent-color:var(--ff-accent,#007acc);width:14px;height:14px;cursor:pointer}
     .hist-table tr.selected td{background:var(--ff-bg-input,#3c3c3c)}
   `] as any : [];
@@ -74,6 +76,8 @@ export class BudgetOverviewView extends Base {
   selSavings = new Set<string>();
   selExpenses = new Set<string>();
   selMoves = new Set<string>();
+  /** Which selection is mid-confirm: null | 'savings' | 'expenses' | 'moves'. */
+  private confirmKey: string | null = null;
   /** Bumped on every selection change so checkbox bindings re-apply. */
   private selRev = 0;
 
@@ -86,7 +90,7 @@ export class BudgetOverviewView extends Base {
     if (!this.finance) return;
     try {
       this.error = '';
-      this.pots = await listCurrentPots(this.finance);
+      this.confirmKey = null;      this.pots = await listCurrentPots(this.finance);
       this.flows = await listCurrentFlows(this.finance);
       this.accountLabels = await accountById(this.finance);
       // Drop selections for rows that no longer exist (e.g. after archive).
@@ -170,18 +174,24 @@ export class BudgetOverviewView extends Base {
     if (changed) this.selRev++;
   }
 
-  /** Selection action bar: Edit (exactly 1) + Archive (n). */
-  private selBarHtml(sel: Set<string>, editEvent: string, archiveEvent: string, bulkEvent: string): unknown {
+  /** Selection action bar: Edit (exactly 1) + two-step Archive confirm. */
+  private selBarHtml(sel: Set<string>, editEvent: string, archiveEvent: string, bulkEvent: string, ckey: string): unknown {
     if (sel.size === 0) return '';
     const keys = [...sel];
+    const label = sel.size === 1 ? 'Archive' : `Archive (${sel.size})`;
+    const confirming = this.confirmKey === ckey;
     return html`<div class="sel-bar"><span class="count">${sel.size} selected</span>
       <button class="btn-link" ?disabled=${sel.size !== 1} title=${sel.size !== 1 ? 'Select one row to edit' : ''} @click=${() => { if (sel.size === 1) this.emit(editEvent, { key: keys[0] }); }}>Edit</button>
-      <button class="btn-link" @click=${() => this.emit(sel.size === 1 ? archiveEvent : bulkEvent, sel.size === 1 ? { key: keys[0] } : { keys })}>Archive${sel.size > 1 ? ` (${sel.size})` : ''}</button>
-      <button class="btn-link" @click=${() => this.clearSel(sel)}>Clear</button>
+      ${confirming
+        ? html`<span class="ask">Archive ${sel.size === 1 ? 'this row' : `${sel.size} rows`}?</span>
+          <button class="btn-link danger" @click=${() => { this.confirmKey = null; this.emit(sel.size === 1 ? archiveEvent : bulkEvent, sel.size === 1 ? { key: keys[0] } : { keys }); }}>Yes, archive</button>
+          <button class="btn-link" @click=${() => { this.confirmKey = null; (this as any).requestUpdate?.(); }}>Keep</button>`
+        : html`<button class="btn-link" @click=${() => { this.confirmKey = ckey; (this as any).requestUpdate?.(); }}>${label}</button>`}
+      <button class="btn-link" @click=${() => { this.confirmKey = null; this.clearSel(sel); }}>Clear</button>
     </div>`;
   }
 
-  private summaryHtml(title: string, colLabel: string, rows: any[], shown: boolean, toggle: () => void, sel: Set<string>, editEvent: string, archiveEvent: string, bulkEvent: string) {
+  private summaryHtml(title: string, colLabel: string, rows: any[], shown: boolean, toggle: () => void, sel: Set<string>, editEvent: string, archiveEvent: string, bulkEvent: string, ckey: string) {
     const total = BudgetOverviewView.sumWeekly(rows);
     const keyOf = (p: any) => p.pot_key;
     const allOn = rows.length > 0 && rows.every((p) => sel.has(keyOf(p)));
@@ -192,7 +202,7 @@ export class BudgetOverviewView extends Base {
         <span class="section-badge">${rows.length}</span>
         <span class="sum"><b>${BudgetOverviewView.aud(total)}</b> / week · ${BudgetOverviewView.aud(total * 52)} / year</span>
       </button>
-      ${shown ? html`${this.selBarHtml(sel, editEvent, archiveEvent, bulkEvent)}
+      ${shown ? html`${this.selBarHtml(sel, editEvent, archiveEvent, bulkEvent, ckey)}
       <div class="table-wrap"><table class="hist-table slim" data-selrev=${this.selRev}>
         <colgroup><col style="width:8%"><col style="width:36%"><col style="width:32%"><col style="width:24%"></colgroup>
         <thead><tr><th><input type="checkbox" ?checked=${allOn} .checked=${allOn} @change=${() => this.toggleAll(sel, rows, keyOf)} aria-label="Select all"></th><th>${colLabel}</th><th>Account</th><th class="num">Weekly</th></tr></thead>
@@ -240,7 +250,7 @@ export class BudgetOverviewView extends Base {
         <button class="chip ${this.moveDay === 'friday' ? 'on' : ''}" @click=${() => setDay('friday')}>Friday</button>
         <button class="chip ${this.moveDay === 'sunday' ? 'on' : ''}" @click=${() => setDay('sunday')}>Sunday</button>
       </div>
-      ${this.selBarHtml(this.selMoves, 'flow-edit-request', 'flow-archive-request', 'flow-archive-bulk')}
+      ${this.selBarHtml(this.selMoves, 'flow-edit-request', 'flow-archive-request', 'flow-archive-bulk', 'moves')}
       <div class="table-wrap"><table class="hist-table" data-selrev=${this.selRev}>
         <colgroup><col style="width:6%"><col style="width:22%"><col style="width:12%"><col style="width:38%"><col style="width:22%"></colgroup>
         <thead><tr><th><input type="checkbox" ?checked=${rows.length > 0 && rows.every((f: any) => this.selMoves.has(f.flow_key))} .checked=${rows.length > 0 && rows.every((f: any) => this.selMoves.has(f.flow_key))} @change=${() => this.toggleAll(this.selMoves, rows, (f: any) => f.flow_key)} aria-label="Select all"></th><th>Move</th><th>Day</th><th>Account</th><th class="num">Weekly</th></tr></thead>
@@ -281,8 +291,8 @@ export class BudgetOverviewView extends Base {
           </div>
         </div>
         <div class="two-col">
-        ${this.summaryHtml('Savings pots', 'Pot', savings, this.showSavings, () => { this.showSavings = !this.showSavings; (this as any).requestUpdate?.(); }, this.selSavings, 'pot-edit-request', 'pot-archive-request', 'pot-archive-bulk')}
-        ${this.summaryHtml('Expense lines', 'Line', expenses, this.showExpenses, () => { this.showExpenses = !this.showExpenses; (this as any).requestUpdate?.(); }, this.selExpenses, 'pot-edit-request', 'pot-archive-request', 'pot-archive-bulk')}
+        ${this.summaryHtml('Savings pots', 'Pot', savings, this.showSavings, () => { this.showSavings = !this.showSavings; (this as any).requestUpdate?.(); }, this.selSavings, 'pot-edit-request', 'pot-archive-request', 'pot-archive-bulk', 'savings')}
+        ${this.summaryHtml('Expense lines', 'Line', expenses, this.showExpenses, () => { this.showExpenses = !this.showExpenses; (this as any).requestUpdate?.(); }, this.selExpenses, 'pot-edit-request', 'pot-archive-request', 'pot-archive-bulk', 'expenses')}
         </div>
         ${this.movesHtml()}
         ${this.trace.length ? html`<div class="section"><div class="section-header"><h3 class="section-title">Plan trace</h3><span class="section-badge">${this.trace.length}</span></div>
