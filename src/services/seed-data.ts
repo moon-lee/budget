@@ -45,16 +45,16 @@ export const SEED_POTS: ReadonlyArray<SeedPot> = [
   { pot_key: 'emergency-2', label: 'Emergency 2', kind: 'saving', weekly_amount: 10, account: '9722' },
   { pot_key: 'mortgage', label: 'Mortgage', kind: 'saving', weekly_amount: 400, account: '0390' },
   // Expense lines (sheet rows 19–28): $500/wk, no bank
-  { pot_key: 'power-bill', label: 'Power Bill', kind: 'expense', weekly_amount: 50, account: null },
-  { pot_key: 'car-rego-insurance', label: 'Car Rego & Insurance', kind: 'expense', weekly_amount: 100, account: null },
-  { pot_key: 'rates-water', label: 'Rates and Water', kind: 'expense', weekly_amount: 100, account: null },
-  { pot_key: 'home-insurance', label: 'Home Insurance', kind: 'expense', weekly_amount: 30, account: null },
-  { pot_key: 'internet', label: 'Internet', kind: 'expense', weekly_amount: 27, account: null },
-  { pot_key: 'mobile', label: 'Mobile', kind: 'expense', weekly_amount: 42, account: null },
-  { pot_key: 'medibank', label: 'Medibank', kind: 'expense', weekly_amount: 28, account: null },
-  { pot_key: 'union-fee', label: 'Union Fee', kind: 'expense', weekly_amount: 20, account: null },
-  { pot_key: 'fitness-pass', label: 'Fitness Pass', kind: 'expense', weekly_amount: 53, account: null },
-  { pot_key: 'car-fuel', label: 'Car Fuel', kind: 'expense', weekly_amount: 50, account: null },
+  { pot_key: 'power-bill', label: 'Power Bill', kind: 'expense', weekly_amount: 50, account: '0390' },
+  { pot_key: 'car-rego-insurance', label: 'Car Rego & Insurance', kind: 'expense', weekly_amount: 100, account: '0390' },
+  { pot_key: 'rates-water', label: 'Rates and Water', kind: 'expense', weekly_amount: 100, account: '0390' },
+  { pot_key: 'home-insurance', label: 'Home Insurance', kind: 'expense', weekly_amount: 30, account: '0390' },
+  { pot_key: 'internet', label: 'Internet', kind: 'expense', weekly_amount: 27, account: '3564' },
+  { pot_key: 'mobile', label: 'Mobile', kind: 'expense', weekly_amount: 42, account: '3564' },
+  { pot_key: 'medibank', label: 'Medibank', kind: 'expense', weekly_amount: 28, account: '3564' },
+  { pot_key: 'union-fee', label: 'Union Fee', kind: 'expense', weekly_amount: 20, account: '3564' },
+  { pot_key: 'fitness-pass', label: 'Fitness Pass', kind: 'expense', weekly_amount: 53, account: '3564' },
+  { pot_key: 'car-fuel', label: 'Car Fuel', kind: 'expense', weekly_amount: 50, account: '3564' },
 ];
 
 export interface SeedFlow {
