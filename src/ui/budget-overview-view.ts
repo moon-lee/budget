@@ -43,7 +43,11 @@ export class BudgetOverviewView extends Base {
     .day-pick{display:flex;align-items:center;gap:8px;margin:0 0 8px}
     .chip{border:1px solid var(--ff-border,#3e3e3e);background:transparent;color:var(--ff-text-muted,#858585);border-radius:12px;padding:3px 12px;font-size:var(--ff-font-sm);cursor:pointer}
     .chip.on{background:var(--ff-bg-input,#3c3c3c);color:var(--ff-text,#d4d4d4);border-color:var(--ff-accent,#007acc)}
-    .day-pick .filter-btn{margin-left:auto}
+    .add-wrap{position:relative}
+    .add-menu{position:absolute;right:0;top:calc(100% + 4px);min-width:170px;background:var(--ff-bg-panel,#252526);border:1px solid var(--ff-border,#3e3e3e);border-radius:8px;padding:4px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.45)}
+    .add-menu button{display:block;width:100%;text-align:left;background:transparent;border:0;color:var(--ff-text,#d4d4d4);font-size:var(--ff-font-base);padding:8px 10px;border-radius:6px;cursor:pointer;white-space:nowrap}
+    .add-menu button:hover{background:var(--ff-bg-input-hover,#4a4a4a)}
+    .add-menu .sub{display:block;font-size:var(--ff-font-sm);color:var(--ff-text-muted,#858585)}
   `] as any : [];
 
   finance: any = null;
@@ -58,6 +62,7 @@ export class BudgetOverviewView extends Base {
   showExpenses = true;
   showMoves = true;
   moveDay: 'all' | 'friday' | 'sunday' = 'all';
+  addOpen = false;
 
   async setFinance(f: any): Promise<void> {
     this.finance = f;
@@ -174,7 +179,6 @@ export class BudgetOverviewView extends Base {
         <button class="chip ${this.moveDay === 'all' ? 'on' : ''}" @click=${() => setDay('all')}>All</button>
         <button class="chip ${this.moveDay === 'friday' ? 'on' : ''}" @click=${() => setDay('friday')}>Friday</button>
         <button class="chip ${this.moveDay === 'sunday' ? 'on' : ''}" @click=${() => setDay('sunday')}>Sunday</button>
-        <button class="filter-btn" @click=${() => this.emit('flow-add-request')}>Add move</button>
       </div>
       <div class="table-wrap"><table class="hist-table">
         <colgroup><col style="width:18%"><col style="width:10%"><col style="width:20%"><col style="width:11%"><col style="width:11%"><col style="width:10%"><col style="width:20%"></colgroup>
@@ -193,7 +197,13 @@ export class BudgetOverviewView extends Base {
     return html`
       <div class="view-scroll">
       <div class="topbar"><span class="crumb-current">Budget · Overview</span><div class="spacer"></div>
-        <button class="filter-btn" @click=${() => this.emit('pot-add-request')}>Add line</button>
+        <div class="add-wrap">
+          <button class="filter-btn" @click=${() => { this.addOpen = !this.addOpen; (this as any).requestUpdate?.(); }}>Add ▾</button>
+          ${this.addOpen ? html`<div class="add-menu">
+            <button @click=${() => { this.addOpen = false; this.emit('pot-add-request'); }}>Pot / expense line<span class="sub">Savings or expense row</span></button>
+            <button @click=${() => { this.addOpen = false; this.emit('flow-add-request'); }}>Pay-day move<span class="sub">Friday or Sunday</span></button>
+          </div>` : ''}
+        </div>
         <button class="filter-btn" @click=${() => this.emit('realloc-request')}>Re-allocate</button></div>
       <div class="view-container"><div class="view-container-inner">
         <h1>Budget Overview</h1>
