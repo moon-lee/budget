@@ -30,6 +30,9 @@ export class BudgetOverviewView extends Base {
     .bad{color:var(--ff-danger,#f48771)}
     .tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 9px;border-radius:10px;border:1px solid var(--ff-border,#3e3e3e);margin-left:8px}
     .trace{font-size:var(--ff-font-sm);opacity:.75}
+    .section-header .spacer{flex:1}
+    .summary{display:flex;align-items:baseline;gap:16px;padding:8px 10px;margin-bottom:8px;background:var(--ff-bg-subpanel,#2a2a2a);border:1px solid var(--ff-border,#3e3e3e);border-radius:8px;font-size:var(--ff-font-base)}
+    .summary .num{font-variant-numeric:tabular-nums;font-weight:700}
   `] as any : [];
 
   finance: any = null;
@@ -39,6 +42,8 @@ export class BudgetOverviewView extends Base {
   balance: any = null;
   trace: any[] = [];
   error = '';
+  showSavings = true;
+  showExpenses = true;
 
   async setFinance(f: any): Promise<void> {
     this.finance = f;
@@ -84,6 +89,24 @@ export class BudgetOverviewView extends Base {
     return this.pots.filter((p: any) => p.kind === kind);
   }
 
+  private static sumWeekly(rows: any[]): number {
+    return Math.round(rows.reduce((n: number, p: any) => n + Number(p.weekly_amount || 0), 0) * 100) / 100;
+  }
+
+  private summaryHtml(title: string, colLabel: string, rows: any[], shown: boolean, toggle: () => void, colGroup: unknown) {
+    const total = BudgetOverviewView.sumWeekly(rows);
+    return html`<div class="section"><div class="section-header"><h3 class="section-title">${title}</h3>
+        <span class="section-badge">${rows.length}</span><div class="spacer"></div>
+        <button class="filter-btn" @click=${toggle}>${shown ? 'Hide' : 'Show'}</button></div>
+      <div class="summary"><span>Total</span><span class="num">${BudgetOverviewView.aud(total)} / week</span><span class="num">${BudgetOverviewView.aud(total * 52)} / year</span></div>
+      ${shown ? html`<div class="table-wrap"><table class="hist-table">
+        <colgroup>${colGroup}</colgroup>
+        <thead><tr><th>${colLabel}</th><th>Account</th><th class="num">Weekly</th><th class="num">Yearly ×52</th><th>Since</th><th></th></tr></thead>
+        <tbody>${rows.map((p) => this.rowHtml(p))}</tbody>
+      </table></div>` : ''}
+    </div>`;
+  }
+
   private rowHtml(p: any) {
     const acct = resolveAccountLabel(this.accountLabels, p.account_id);
     return html`<tr>
@@ -120,20 +143,8 @@ export class BudgetOverviewView extends Base {
               <div class="s">${balanced ? 'Balanced' : 'Over budget'}</div></div>
           </div>
         </div>
-        <div class="section"><div class="section-header"><h3 class="section-title">Savings pots</h3><span class="section-badge">${savings.length}</span></div>
-          <div class="table-wrap"><table class="hist-table">
-            <colgroup><col style="width:20%"><col style="width:20%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:24%"></colgroup>
-            <thead><tr><th>Pot</th><th>Account</th><th class="num">Weekly</th><th class="num">Yearly ×52</th><th>Since</th><th></th></tr></thead>
-            <tbody>${savings.map((p) => this.rowHtml(p))}</tbody>
-          </table></div>
-        </div>
-        <div class="section"><div class="section-header"><h3 class="section-title">Expense lines</h3><span class="section-badge">${expenses.length}</span></div>
-          <div class="table-wrap"><table class="hist-table">
-            <colgroup><col style="width:20%"><col style="width:20%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:24%"></colgroup>
-            <thead><tr><th>Line</th><th>Account</th><th class="num">Weekly</th><th class="num">Yearly ×52</th><th>Since</th><th></th></tr></thead>
-            <tbody>${expenses.map((p) => this.rowHtml(p))}</tbody>
-          </table></div>
-        </div>
+        ${this.summaryHtml('Savings pots', 'Pot', savings, this.showSavings, () => { this.showSavings = !this.showSavings; (this as any).requestUpdate?.(); }, html`<col style="width:20%"><col style="width:20%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:24%">`)}
+        ${this.summaryHtml('Expense lines', 'Line', expenses, this.showExpenses, () => { this.showExpenses = !this.showExpenses; (this as any).requestUpdate?.(); }, html`<col style="width:20%"><col style="width:20%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:24%">`)}
         ${this.trace.length ? html`<div class="section"><div class="section-header"><h3 class="section-title">Plan trace</h3><span class="section-badge">${this.trace.length}</span></div>
           <div class="table-wrap"><table class="hist-table">
             <thead><tr><th>Item</th><th class="num">Weekly</th><th>From</th><th>To</th><th>Note</th></tr></thead>
