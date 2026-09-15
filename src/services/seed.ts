@@ -18,7 +18,9 @@ async function count(finance: any, table: string): Promise<number> {
 export async function seedBudget(finance: any): Promise<void> {
   if ((await count(finance, 'budget_accounts')) === 0) {
     for (const a of SEED_ACCOUNTS) {
-      await finance.db.table('budget_accounts').insert({ ...a, bank: a.bank ?? null });
+      // is_active written explicitly: the mock (and DAO) store exactly
+      // what's given — never rely on the manifest default here.
+      await finance.db.table('budget_accounts').insert({ ...a, bank: a.bank ?? null, is_active: true });
     }
   }
 
