@@ -29,6 +29,7 @@ export class BudgetOverviewView extends Base {
     .card .s{font-size:var(--ff-font-sm);opacity:.7}
     .ok{color:var(--ff-teal,#4ec9b0)}
     .bad{color:var(--ff-danger,#f48771)}
+    .warn{color:var(--ff-warning-text,#ffd866)}
     .tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 9px;border-radius:10px;border:1px solid var(--ff-border,#3e3e3e);margin-left:8px}
     .trace{font-size:var(--ff-font-sm);opacity:.75}
     .section-header .spacer{flex:1}
@@ -261,8 +262,10 @@ export class BudgetOverviewView extends Base {
 
   override render(): unknown {
     if (typeof HTMLElement === 'undefined') return html``;
-    const b = this.balance ?? { income_weekly: 0, savings_weekly: 0, expenses_weekly: 0, balance_weekly: 0 };
+    const b = this.balance ?? { income_weekly: 0, savings_weekly: 0, expenses_weekly: 0, balance_weekly: 0, moves_weekly: 0, moves_gap_weekly: 0 };
     const balanced = Number(b.balance_weekly) >= 0;
+    const gap = Math.round(Number(b.moves_gap_weekly || 0) * 100) / 100;
+    const reconciled = gap === 0;
     const savings = this.rows('saving');
     const expenses = this.rows('expense');
     return html`
@@ -288,6 +291,8 @@ export class BudgetOverviewView extends Base {
               <div class="s">Savings ${BudgetOverviewView.aud(b.savings_weekly)} + Expenses ${BudgetOverviewView.aud(b.expenses_weekly)}</div></div>
             <div class="card"><div class="k">Balance</div><div class="v ${balanced ? 'ok' : 'bad'}">${BudgetOverviewView.aud(b.balance_weekly)}</div>
               <div class="s">${balanced ? 'Balanced' : 'Over budget'}</div></div>
+            <div class="card"><div class="k">Moves</div><div class="v ${reconciled ? 'ok' : 'warn'}">${BudgetOverviewView.aud(b.moves_weekly)}</div>
+              <div class="s">${reconciled ? 'Matches planned out' : `${BudgetOverviewView.aud(Math.abs(gap))}/wk ${gap > 0 ? 'unallocated' : 'over-moved'}`}</div></div>
           </div>
         </div>
         <div class="two-col">

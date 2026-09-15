@@ -43,6 +43,9 @@ export interface BalanceCheck {
   savings_weekly: number;
   expenses_weekly: number;
   balance_weekly: number;
+  moves_weekly: number;
+  /** Planned out (savings + expenses) minus moved (Friday + Sunday). 0 = reconciled. */
+  moves_gap_weekly: number;
 }
 
 export async function balanceCheck(finance: any, financeYear?: string): Promise<BalanceCheck> {
@@ -54,11 +57,17 @@ export async function balanceCheck(finance: any, financeYear?: string): Promise<
   const e = pots
     .filter((p) => p.kind === 'expense')
     .reduce((n: number, p: any) => n + Number(p.weekly_amount || 0), 0);
+  const flows = await listCurrentFlows(finance);
+  const m = flows.reduce((n: number, f: any) => n + Number(f.weekly_amount || 0), 0);
+  const out = Math.round((s + e) * 100) / 100;
+  const moved = Math.round(m * 100) / 100;
   return {
     income_weekly: income,
     savings_weekly: Math.round(s * 100) / 100,
     expenses_weekly: Math.round(e * 100) / 100,
     balance_weekly: Math.round((income - s - e) * 100) / 100,
+    moves_weekly: moved,
+    moves_gap_weekly: Math.round((out - moved) * 100) / 100,
   };
 }
 
