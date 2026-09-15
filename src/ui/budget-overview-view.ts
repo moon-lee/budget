@@ -52,6 +52,8 @@ export class BudgetOverviewView extends Base {
     @media (max-width:900px){.two-col{grid-template-columns:1fr}}
     .sel-bar{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:var(--ff-font-sm);color:var(--ff-text-muted,#858585)}
     .sel-bar .count{font-weight:700;color:var(--ff-text,#d4d4d4)}
+    .sel-bar .btn-link:disabled{opacity:.4;cursor:not-allowed;text-decoration:none}
+    .sel-bar .btn-link:disabled:hover{text-decoration:none}
     .hist-table input[type=checkbox]{accent-color:var(--ff-accent,#007acc);width:14px;height:14px;cursor:pointer}
     .hist-table tr.selected td{background:var(--ff-bg-input,#3c3c3c)}
   `] as any : [];
