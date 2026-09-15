@@ -44,7 +44,7 @@ export const SEED_POTS: ReadonlyArray<SeedPot> = [
   { pot_key: 'emergency-3', label: 'Private Fund', kind: 'saving', weekly_amount: 10, account: '9282' },
   { pot_key: 'emergency-2', label: 'Emergency 2', kind: 'saving', weekly_amount: 10, account: '9722' },
   { pot_key: 'mortgage', label: 'Mortgage', kind: 'saving', weekly_amount: 400, account: '0390' },
-  // Expense lines (sheet rows 19–28): $500/wk, no bank
+  // Expense lines (sheet rows 19–28): $500/wk — big-4 via 0390, small bills via 3564
   { pot_key: 'power-bill', label: 'Power Bill', kind: 'expense', weekly_amount: 50, account: '0390' },
   { pot_key: 'car-rego-insurance', label: 'Car Rego & Insurance', kind: 'expense', weekly_amount: 100, account: '0390' },
   { pot_key: 'rates-water', label: 'Rates and Water', kind: 'expense', weekly_amount: 100, account: '0390' },
