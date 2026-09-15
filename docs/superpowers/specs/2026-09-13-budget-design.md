@@ -54,16 +54,16 @@ Stable master list (mortgage `mortgage_accounts` shape + `bank` for sheet groupi
 | account_key | bank | label |
 |---|---|---|
 | 5272 | NAB SAVING | Emergency |
-| 0743 | NULL | Child |
-| 8107 | NULL | Solar |
-| 4323 | NULL | Investment |
-| 3545 | NULL | New Car |
-| 9722 | NULL | Emergency 2 |
+| 0743 | NAB SAVING | Child |
+| 8107 | NAB SAVING | Solar |
+| 4323 | NAB SAVING | Investment |
+| 3545 | NAB SAVING | New Car |
+| 9722 | NAB SAVING | Emergency 2 |
 | 3564 | NAB SAVING | Bills hub |
-| nab-offset | NAB OFFSET | Mortgage / Bills hub |
-| boq | BOQ | Family Fund |
-| macquarie | MACQUARIE | Home Expenses |
-| ubank | UBANK | Emergency 3 |
+| 0390 | NAB OFFSET | Mortgage / Bills hub |
+| 2730 | BOQ | Family Fund |
+| 3804 | MACQUARIE | Home Expenses |
+| 9282 | UBANK | Private Fund |
 
 ```json
 {

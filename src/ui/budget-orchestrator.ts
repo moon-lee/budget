@@ -1,6 +1,6 @@
 import { LitElement, css, html } from 'lit';
 import { sharedStyles } from '../styles/shared-styles.js';
-import { createAccount, renameAccount, setAccountActive } from '../dao/accounts.js';
+import { createAccount, updateAccount, setAccountActive } from '../dao/accounts.js';
 import { archiveFlow, saveFlow } from '../dao/flows.js';
 import { saveIncome } from '../dao/income.js';
 import { archivePot, savePot } from '../dao/pots.js';
@@ -229,7 +229,7 @@ export class BudgetOrchestrator extends Base {
   private async onAccountEdit(detail: any): Promise<void> {
     if (!this.finance) return;
     try {
-      await renameAccount(this.finance, detail.id, detail.label);
+      await updateAccount(this.finance, detail.id, { label: detail.label, bank: detail.bank ?? undefined });
       await this.refresh();
     } catch (e: any) {
       this.error = String(e?.message || e);

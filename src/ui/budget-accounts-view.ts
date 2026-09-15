@@ -6,7 +6,8 @@ const Base = typeof HTMLElement !== 'undefined' ? LitElement : (class {} as unkn
 
 /**
  * Accounts view (spec §3.3, mortgage accounts-view shape):
- * table (bank, key, label, active toggle) + inline Add/Rename.
+ * table (bank, key, label, active toggle) + inline Add/Edit.
+ * Key is the stable identity (read-only on edit); bank + label editable.
  * Dispatches account-create / account-edit / account-toggle to the orchestrator.
  */
 export class BudgetAccountsView extends Base {
@@ -71,24 +72,26 @@ export class BudgetAccountsView extends Base {
             <tbody>${this.rows.map((r: any) => html`<tr class=${r.is_active ? '' : 'inactive'}>
               <td>${r.account_key}</td><td>${r.bank ?? '—'}</td><td>${r.label}</td>
               <td class=${r.is_active ? 'status-on' : 'status-off'}>${r.is_active ? 'Active' : 'Inactive'}</td>
-              <td class="actions"><button class="btn-link" @click=${() => { this.editing = { mode: 'edit', row: r }; (this as any).requestUpdate?.(); }}>Rename</button><button class="btn-link" @click=${() => this.emit('account-toggle', { id: r.id, active: !r.is_active })}>${r.is_active ? 'Deactivate' : 'Activate'}</button></td>
+              <td class="actions"><button class="btn-link" @click=${() => { this.editing = { mode: 'edit', row: r }; (this as any).requestUpdate?.(); }}>Edit</button><button class="btn-link" @click=${() => this.emit('account-toggle', { id: r.id, active: !r.is_active })}>${r.is_active ? 'Deactivate' : 'Activate'}</button></td>
             </tr>`)}</tbody>
           </table></div>
         </div>
         ${this.editing ? html`<div class="section">
-          <div class="section-header"><h3 class="section-title">${this.editing.mode === 'add' ? 'Add account' : 'Rename account'}</h3></div>
+          <div class="section-header"><h3 class="section-title">${this.editing.mode === 'add' ? 'Add account' : 'Edit account'}</h3></div>
           <div class="section-body">
             <div class="grid-2">
               ${this.editing.mode === 'add' ? html`
-                <div class="field"><label>Key <span class="label-sub">e.g. 5272, unique</span></label><input id="a-key" type="text"></div>
-                <div class="field"><label>Bank <span class="label-sub">e.g. NAB SAVING, optional</span></label><input id="a-bank" type="text"></div>` : ''}
+                <div class="field"><label>Key <span class="label-sub">e.g. 5272, unique, immutable</span></label><input id="a-key" type="text"></div>
+                <div class="field"><label>Bank <span class="label-sub">e.g. NAB SAVING, optional</span></label><input id="a-bank" type="text"></div>` : html`
+                <div class="field"><label>Key <span class="label-sub">stable identity, read-only</span></label><input id="a-key" type="text" .value=${this.editing.row.account_key} disabled></div>
+                <div class="field"><label>Bank <span class="label-sub">e.g. NAB SAVING, optional</span></label><input id="a-bank" type="text" .value=${this.editing.row.bank ?? ''}></div>`}
               <div class="field"><label>Label</label><input id="a-label" type="text" .value=${this.editing.mode === 'edit' ? this.editing.row.label : ''}></div>
             </div>
             <div class="footer">
               <button class="btn btn-secondary" @click=${() => { this.editing = null; (this as any).requestUpdate?.(); }}>Cancel</button>
               <button class="btn btn-primary" @click=${() => {
                 if (this.editing.mode === 'add') this.emit('account-create', this.readForm());
-                else this.emit('account-edit', { id: this.editing.row.id, label: (this as any).renderRoot.querySelector('#a-label').value });
+                else this.emit('account-edit', { id: this.editing.row.id, label: (this as any).renderRoot.querySelector('#a-label').value, bank: (this as any).renderRoot.querySelector('#a-bank').value });
               }}>Save</button>
             </div>
           </div>

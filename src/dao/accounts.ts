@@ -60,12 +60,30 @@ export async function createAccount(
   return res.id as number;
 }
 
-export async function renameAccount(finance: any, id: number, label: string): Promise<void> {
-  const name = String(label || '').trim();
-  if (!name) throw new Error('ValidationFailed: account label is required');
+export async function updateAccount(
+  finance: any,
+  id: number,
+  patch: { label?: string; bank?: string | null }
+): Promise<void> {
   const existing = (await finance.db.table('budget_accounts').findOne({ id })) as AccountRow | null;
   if (!existing) throw new Error('ValidationFailed: account not found');
-  await finance.db.table('budget_accounts').update({ id }, { label: name });
+  // account_key is the stable identity (seed lookups + FK trace) — never edited.
+  const update: Record<string, unknown> = {};
+  if (patch.label !== undefined) {
+    const name = String(patch.label || '').trim();
+    if (!name) throw new Error('ValidationFailed: account label is required');
+    update.label = name;
+  }
+  if (patch.bank !== undefined) {
+    update.bank = patch.bank?.trim() ? String(patch.bank).trim() : null;
+  }
+  if (Object.keys(update).length === 0) return;
+  await finance.db.table('budget_accounts').update({ id }, update);
+}
+
+/** @deprecated Use updateAccount instead. */
+export async function renameAccount(finance: any, id: number, label: string): Promise<void> {
+  await updateAccount(finance, id, { label });
 }
 
 async function referencedByCurrentRow(finance: any, id: number): Promise<boolean> {
