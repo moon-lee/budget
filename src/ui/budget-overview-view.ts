@@ -61,6 +61,7 @@ export class BudgetOverviewView extends Base {
     .sel-bar .btn-link.danger{color:var(--ff-danger,#f48771)}
     .hist-table input[type=checkbox]{accent-color:var(--ff-accent,#007acc);width:14px;height:14px;cursor:pointer}
     .hist-table tr.selected td{background:var(--ff-bg-input,#3c3c3c)}
+    .hist-table tr.mismatch td{background:var(--ff-danger-bg,#5a2a2a)}
   `] as any : [];
 
   finance: any = null;
@@ -81,6 +82,7 @@ export class BudgetOverviewView extends Base {
   selExpenses = new Set<string>();
   selMoves = new Set<string>();
   showTrace = false;
+  showMatch = true;
   /** Which selection is mid-confirm: null | 'savings' | 'expenses' | 'moves'. */
   private confirmKey: string | null = null;
   /** Bumped on every selection change so checkbox bindings re-apply. */
@@ -270,6 +272,64 @@ export class BudgetOverviewView extends Base {
     </div>`;
   }
 
+  /** Per-account planned (pots) vs moved (flows). Rows with a gap get warn styling. */
+  private accountMatch(): Array<{ id: number | null; label: string; planned: number; moved: number; gap: number }> {
+    const planned = new Map<number, number>();
+    for (const p of this.pots) {
+      if (p.account_id == null) continue;
+      planned.set(Number(p.account_id), (planned.get(Number(p.account_id)) ?? 0) + Number(p.weekly_amount || 0));
+    }
+    const moved = new Map<number, number>();
+    for (const f of this.flows) {
+      if (f.account_id == null) continue;
+      moved.set(Number(f.account_id), (moved.get(Number(f.account_id)) ?? 0) + Number(f.weekly_amount || 0));
+    }
+    const ids = new Set<number>([...planned.keys(), ...moved.keys()]);
+    const out: Array<{ id: number | null; label: string; planned: number; moved: number; gap: number }> = [];
+    for (const id of ids) {
+      const p = Math.round((planned.get(id) ?? 0) * 100) / 100;
+      const m = Math.round((moved.get(id) ?? 0) * 100) / 100;
+      out.push({
+        id,
+        label: resolveAccountLabel(this.accountLabels, id) ?? `#${id}`,
+        planned: p,
+        moved: m,
+        gap: Math.round((p - m) * 100) / 100,
+      });
+    }
+    // Mismatches first, then by planned desc.
+    out.sort((a, b) => (Number(b.gap !== 0) - Number(a.gap !== 0)) || (b.planned - a.planned));
+    // Unassigned rollup (planned with no account — cannot match a move).
+    const unassigned = BudgetOverviewView.sumWeekly(this.pots.filter((p: any) => p.account_id == null));
+    if (unassigned > 0) out.push({ id: null, label: 'No account', planned: unassigned, moved: 0, gap: unassigned });
+    return out;
+  }
+
+  private matchHtml() {
+    const rows = this.accountMatch();
+    const mismatched = rows.filter((r) => r.gap !== 0).length;
+    const shown = this.showMatch;
+    const toggle = () => { this.showMatch = !this.showMatch; (this as any).requestUpdate?.(); };
+    return html`<div class="section">
+      <button class="group-head ${shown ? 'open' : ''}" @click=${toggle} aria-expanded=${shown ? 'true' : 'false'}>
+        <span class="chev"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <span class="t">Account match</span>
+        <span class="section-badge">${rows.length}</span>
+        <span class="sum">${mismatched === 0 ? 'All matched' : html`<b class="warn">${mismatched} mismatched</b>`}</span>
+      </button>
+      ${shown ? html`<div class="table-wrap"><table class="hist-table">
+        <colgroup><col style="width:34%"><col style="width:22%"><col style="width:22%"><col style="width:22%"></colgroup>
+        <thead><tr><th>Account</th><th class="num">Planned</th><th class="num">Moved</th><th class="num">Gap</th></tr></thead>
+        <tbody>${rows.map((r) => html`<tr class=${r.gap !== 0 ? 'mismatch' : ''}>
+          <td>${r.label}</td>
+          <td class="num">${BudgetOverviewView.aud(r.planned)}</td>
+          <td class="num">${BudgetOverviewView.aud(r.moved)}</td>
+          <td class="num ${r.gap !== 0 ? 'warn' : 'ok'}">${r.gap === 0 ? '—' : BudgetOverviewView.aud(r.gap)}</td>
+        </tr>`)}</tbody>
+      </table></div>` : ''}
+    </div>`;
+  }
+
   override render(): unknown {
     if (typeof HTMLElement === 'undefined') return html``;
     const b = this.balance ?? { income_weekly: 0, savings_weekly: 0, expenses_weekly: 0, balance_weekly: 0, moves_weekly: 0, moves_gap_weekly: 0 };
@@ -312,6 +372,7 @@ export class BudgetOverviewView extends Base {
         ${this.summaryHtml('Expense lines', 'Line', expenses, this.showExpenses, () => { this.showExpenses = !this.showExpenses; (this as any).requestUpdate?.(); }, this.selExpenses, 'pot-edit-request', 'pot-archive-request', 'pot-archive-bulk', 'expenses')}
         </div>
         <div style="order:${this.sectionIndex('moves')}">${this.movesHtml()}</div>
+        <div style="order:${this.sectionIndex('match')}">${this.matchHtml()}</div>
         ${this.trace.length ? html`<div class="section" style="order:${this.sectionIndex('trace')}">
           <button class="group-head ${this.showTrace ? 'open' : ''}" @click=${() => { this.showTrace = !this.showTrace; (this as any).requestUpdate?.(); }} aria-expanded=${this.showTrace ? 'true' : 'false'}>
             <span class="chev"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>

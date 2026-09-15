@@ -1,4 +1,4 @@
-export const CANONICAL_SECTION_ORDER = ['income', 'plans', 'moves', 'trace'] as const;
+export const CANONICAL_SECTION_ORDER = ['income', 'plans', 'moves', 'match', 'trace'] as const;
 
 export type OverviewSectionId = (typeof CANONICAL_SECTION_ORDER)[number];
 
@@ -6,6 +6,7 @@ export const SECTION_LABELS: Record<OverviewSectionId, string> = {
   income: 'Income & balance',
   plans: 'Savings pots + Expense lines',
   moves: 'Pay-day moves',
+  match: 'Account match',
   trace: 'Plan trace',
 };
 
