@@ -26,7 +26,6 @@ export async function activate(finance: FinanceApi, ctx: { viewId?: string } & R
   await seedBudget(finance as any);
 
   finance.commands.registerCommand('budget.show-overview', 'Budget: Overview', openView('budget-overview'));
-  finance.commands.registerCommand('budget.show-flows', 'Budget: Flow Planner', openView('budget-flows'));
   finance.commands.registerCommand('budget.show-accounts', 'Budget: Accounts', openView('budget-accounts'));
 
   finance.services.register('budget', {

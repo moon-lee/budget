@@ -1,7 +1,6 @@
 import { SampleView } from './budget-view';
 import { BudgetOrchestrator } from './budget-orchestrator.js';
 import { BudgetOverviewView } from './budget-overview-view.js';
-import { BudgetFlowsView } from './budget-flows-view.js';
 import { BudgetAccountsView } from './budget-accounts-view.js';
 import { BudgetPotForm } from './budget-pot-form.js';
 import { BudgetFlowForm } from './budget-flow-form.js';
@@ -9,7 +8,6 @@ import { BudgetReallocForm } from './budget-realloc-form.js';
 if (typeof customElements !== 'undefined' && !customElements.get('budget-view')) customElements.define('budget-view', SampleView as unknown as CustomElementConstructor);
 if (typeof customElements !== 'undefined' && !customElements.get('budget-orchestrator')) customElements.define('budget-orchestrator', BudgetOrchestrator as unknown as CustomElementConstructor);
 if (typeof customElements !== 'undefined' && !customElements.get('budget-overview')) customElements.define('budget-overview', BudgetOverviewView as unknown as CustomElementConstructor);
-if (typeof customElements !== 'undefined' && !customElements.get('budget-flows')) customElements.define('budget-flows', BudgetFlowsView as unknown as CustomElementConstructor);
 if (typeof customElements !== 'undefined' && !customElements.get('budget-accounts')) customElements.define('budget-accounts', BudgetAccountsView as unknown as CustomElementConstructor);
 if (typeof customElements !== 'undefined' && !customElements.get('budget-pot-form')) customElements.define('budget-pot-form', BudgetPotForm as unknown as CustomElementConstructor);
 if (typeof customElements !== 'undefined' && !customElements.get('budget-flow-form')) customElements.define('budget-flow-form', BudgetFlowForm as unknown as CustomElementConstructor);

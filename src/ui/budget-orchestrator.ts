@@ -12,7 +12,6 @@ const log = new ExtensionLogger('budget');
 
 type Tag =
   | 'budget-overview'
-  | 'budget-flows'
   | 'budget-accounts'
   | 'budget-pot-form'
   | 'budget-flow-form'
@@ -44,7 +43,7 @@ export class BudgetOrchestrator extends Base {
     // Target child arrives as mount.view (single-panel mounts) or legacy mount.viewId (dev dropdown).
     const v = (mount.view ?? mount.viewId) as string | undefined;
     if (v === 'budget' || v === 'budget-overview' || v === undefined) this.view = 'budget-overview';
-    else if (v === 'budget-flows') this.view = 'budget-flows';
+    else if (v === 'budget-flows') this.view = 'budget-overview'; // folded into Overview (Pay-day moves group)
     else if (v === 'budget-accounts') this.view = 'budget-accounts';
     this.formEdit = null;
     await this.pushFinance();
@@ -98,11 +97,11 @@ export class BudgetOrchestrator extends Base {
     on('pot-create', (d: any) => void this.onSavePot(d, false));
     on('pot-edit', (d: any) => void this.onSavePot(d, true));
     on('pot-form-cancel', () => this.navigate(this.returnTo));
-    // flow requests
-    on('flow-add-request', () => { this.formEdit = null; this.returnTo = 'budget-flows'; this.navigate('budget-flow-form'); });
+    // flow requests (moves live inside Overview; forms return there)
+    on('flow-add-request', () => { this.formEdit = null; this.returnTo = 'budget-overview'; this.navigate('budget-flow-form'); });
     on('flow-edit-request', async (d: any) => {
       this.formEdit = await this.prefillFlow(d?.key);
-      this.returnTo = 'budget-flows';
+      this.returnTo = 'budget-overview';
       this.navigate('budget-flow-form');
     });
     on('flow-archive-request', (d: any) => void this.onArchiveFlow(d?.key));
@@ -261,7 +260,6 @@ export class BudgetOrchestrator extends Base {
       <div class="shell">
       ${this.error ? html`<div class="view-container"><div class="view-container-inner"><p class="field-error">Error: ${this.error}</p></div></div>` : ''}
       ${this.view === 'budget-overview' ? html`<budget-overview id="child"></budget-overview>` : ''}
-      ${this.view === 'budget-flows' ? html`<budget-flows id="child"></budget-flows>` : ''}
       ${this.view === 'budget-accounts' ? html`<budget-accounts id="child"></budget-accounts>` : ''}
       ${this.view === 'budget-pot-form' ? html`<budget-pot-form id="child"></budget-pot-form>` : ''}
       ${this.view === 'budget-flow-form' ? html`<budget-flow-form id="child"></budget-flow-form>` : ''}

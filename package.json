@@ -15,18 +15,16 @@
       "views": [{ "id": "budget", "name": "Budget", "icon": "assets/icon.svg" }],
       "commands": [
         { "id": "budget.show-overview", "title": "Budget: Overview" },
-        { "id": "budget.show-flows", "title": "Budget: Flow Planner" },
         { "id": "budget.show-accounts", "title": "Budget: Accounts" }
       ],
       "navigation": [
         { "id": "budget-overview", "label": "Overview", "command": "budget.show-overview", "group": "Budget" },
-        { "id": "budget-flows", "label": "Flow Planner", "command": "budget.show-flows", "group": "Budget" },
         { "id": "budget-accounts", "label": "Accounts", "command": "budget.show-accounts", "group": "Budget" }
       ],
       "configuration": [
         { "key": "budget.themeColor", "type": "string", "label": "Accent color (hex).", "default": "#EA580C", "pattern": "^#[0-9A-Fa-f]{6}$", "formatHint": "#RRGGBB", "placeholder": "#EA580C" }
       ],
-      "allowedCommands": ["budget.show-overview", "budget.show-flows", "budget.show-accounts"],
+      "allowedCommands": ["budget.show-overview", "budget.show-accounts"],
       "allowedUiEvents": ["pot-add-request", "pot-create", "pot-edit-request", "pot-edit", "pot-archive-request", "pot-form-cancel", "flow-add-request", "flow-create", "flow-edit-request", "flow-edit", "flow-archive-request", "flow-form-cancel", "realloc-request", "realloc-save", "realloc-cancel", "account-create", "account-edit", "account-toggle"]
     },
     "tables": [

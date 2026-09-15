@@ -4,6 +4,7 @@ import { accountById, resolveAccountLabel } from '../dao/accounts.js';
 import { listPotHistory } from '../dao/pots.js';
 import { balanceCheck } from '../services/budget-service.js';
 import { listCurrentPots } from '../dao/pots.js';
+import { listCurrentFlows } from '../dao/flows.js';
 
 const Base = typeof HTMLElement !== 'undefined' ? LitElement : (class {} as unknown as typeof LitElement);
 
@@ -39,10 +40,15 @@ export class BudgetOverviewView extends Base {
     .group-head .t{font-weight:700}
     .group-head .sum{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--ff-text-muted,#858585);font-size:var(--ff-font-sm)}
     .group-head .sum b{color:var(--ff-text,#d4d4d4)}
+    .day-pick{display:flex;align-items:center;gap:8px;margin:0 0 8px}
+    .chip{border:1px solid var(--ff-border,#3e3e3e);background:transparent;color:var(--ff-text-muted,#858585);border-radius:12px;padding:3px 12px;font-size:var(--ff-font-sm);cursor:pointer}
+    .chip.on{background:var(--ff-bg-input,#3c3c3c);color:var(--ff-text,#d4d4d4);border-color:var(--ff-accent,#007acc)}
+    .day-pick .filter-btn{margin-left:auto}
   `] as any : [];
 
   finance: any = null;
   pots: any[] = [];
+  flows: any[] = [];
   accountLabels = new Map<number, any>();
   incomeManual = false;
   balance: any = null;
@@ -50,6 +56,8 @@ export class BudgetOverviewView extends Base {
   error = '';
   showSavings = true;
   showExpenses = true;
+  showMoves = true;
+  moveDay: 'all' | 'friday' | 'sunday' = 'all';
 
   async setFinance(f: any): Promise<void> {
     this.finance = f;
@@ -61,6 +69,7 @@ export class BudgetOverviewView extends Base {
     try {
       this.error = '';
       this.pots = await listCurrentPots(this.finance);
+      this.flows = await listCurrentFlows(this.finance);
       this.accountLabels = await accountById(this.finance);
       // income source tag: live `pay` present and positive → Salary, else manual (spec §6)
       this.incomeManual = true;
@@ -95,6 +104,15 @@ export class BudgetOverviewView extends Base {
     return this.pots.filter((p: any) => p.kind === kind);
   }
 
+  private flowsForDay(day: 'friday' | 'sunday'): any[] {
+    return this.flows.filter((f: any) => f.day === day);
+  }
+
+  private visibleMoves(): any[] {
+    if (this.moveDay === 'all') return this.flows;
+    return this.flows.filter((f: any) => f.day === this.moveDay);
+  }
+
   private static sumWeekly(rows: any[]): number {
     return Math.round(rows.reduce((n: number, p: any) => n + Number(p.weekly_amount || 0), 0) * 100) / 100;
   }
@@ -127,6 +145,44 @@ export class BudgetOverviewView extends Base {
     </tr>`;
   }
 
+  private moveRowHtml(f: any) {
+    return html`<tr>
+      <td>${f.label}</td><td>${f.day === 'friday' ? 'Friday' : 'Sunday'}</td><td>${resolveAccountLabel(this.accountLabels, f.account_id) ?? '—'}</td>
+      <td class="num">${BudgetOverviewView.aud(f.weekly_amount)}</td>
+      <td class="num">${BudgetOverviewView.aud(Number(f.weekly_amount || 0) * 52)}</td>
+      <td>${f.effective_from}</td>
+      <td class="actions"><button class="btn-link" @click=${() => this.emit('flow-edit-request', { key: f.flow_key })}>Edit</button><button class="btn-link" @click=${() => this.emit('flow-archive-request', { key: f.flow_key })}>Archive</button></td>
+    </tr>`;
+  }
+
+  private movesHtml() {
+    const friday = BudgetOverviewView.sumWeekly(this.flowsForDay('friday'));
+    const sunday = BudgetOverviewView.sumWeekly(this.flowsForDay('sunday'));
+    const rows = this.visibleMoves();
+    const shown = this.showMoves;
+    const toggle = () => { this.showMoves = !this.showMoves; (this as any).requestUpdate?.(); };
+    const setDay = (d: 'all' | 'friday' | 'sunday') => { this.moveDay = d; (this as any).requestUpdate?.(); };
+    return html`<div class="section">
+      <button class="group-head ${shown ? 'open' : ''}" @click=${toggle} aria-expanded=${shown ? 'true' : 'false'}>
+        <span class="chev"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <span class="t">Pay-day moves</span>
+        <span class="section-badge">${rows.length}</span>
+        <span class="sum">Fri <b>${BudgetOverviewView.aud(friday)}</b> · Sun <b>${BudgetOverviewView.aud(sunday)}</b> / week</span>
+      </button>
+      ${shown ? html`<div class="day-pick" @click=${(e: Event) => e.stopPropagation()}>
+        <button class="chip ${this.moveDay === 'all' ? 'on' : ''}" @click=${() => setDay('all')}>All</button>
+        <button class="chip ${this.moveDay === 'friday' ? 'on' : ''}" @click=${() => setDay('friday')}>Friday</button>
+        <button class="chip ${this.moveDay === 'sunday' ? 'on' : ''}" @click=${() => setDay('sunday')}>Sunday</button>
+        <button class="filter-btn" @click=${() => this.emit('flow-add-request')}>Add move</button>
+      </div>
+      <div class="table-wrap"><table class="hist-table">
+        <colgroup><col style="width:18%"><col style="width:10%"><col style="width:20%"><col style="width:11%"><col style="width:11%"><col style="width:10%"><col style="width:20%"></colgroup>
+        <thead><tr><th>Move</th><th>Day</th><th>Account</th><th class="num">Weekly</th><th class="num">Yearly ×52</th><th>Since</th><th></th></tr></thead>
+        <tbody>${rows.map((f) => this.moveRowHtml(f))}</tbody>
+      </table></div>` : ''}
+    </div>`;
+  }
+
   override render(): unknown {
     if (typeof HTMLElement === 'undefined') return html``;
     const b = this.balance ?? { income_weekly: 0, savings_weekly: 0, expenses_weekly: 0, balance_weekly: 0 };
@@ -154,6 +210,7 @@ export class BudgetOverviewView extends Base {
         </div>
         ${this.summaryHtml('Savings pots', 'Pot', savings, this.showSavings, () => { this.showSavings = !this.showSavings; (this as any).requestUpdate?.(); }, html`<col style="width:20%"><col style="width:20%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:24%">`)}
         ${this.summaryHtml('Expense lines', 'Line', expenses, this.showExpenses, () => { this.showExpenses = !this.showExpenses; (this as any).requestUpdate?.(); }, html`<col style="width:20%"><col style="width:20%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:24%">`)}
+        ${this.movesHtml()}
         ${this.trace.length ? html`<div class="section"><div class="section-header"><h3 class="section-title">Plan trace</h3><span class="section-badge">${this.trace.length}</span></div>
           <div class="table-wrap"><table class="hist-table">
             <thead><tr><th>Item</th><th class="num">Weekly</th><th>From</th><th>To</th><th>Note</th></tr></thead>
