@@ -158,6 +158,7 @@ export class BudgetOverviewView extends Base {
   private movesHtml() {
     const friday = BudgetOverviewView.sumWeekly(this.flowsForDay('friday'));
     const sunday = BudgetOverviewView.sumWeekly(this.flowsForDay('sunday'));
+    const combined = Math.round((friday + sunday) * 100) / 100;
     const rows = this.visibleMoves();
     const shown = this.showMoves;
     const toggle = () => { this.showMoves = !this.showMoves; (this as any).requestUpdate?.(); };
@@ -167,7 +168,7 @@ export class BudgetOverviewView extends Base {
         <span class="chev"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
         <span class="t">Pay-day moves</span>
         <span class="section-badge">${rows.length}</span>
-        <span class="sum">Fri <b>${BudgetOverviewView.aud(friday)}</b> · Sun <b>${BudgetOverviewView.aud(sunday)}</b> / week</span>
+        <span class="sum">Fri <b>${BudgetOverviewView.aud(friday)}</b> · Sun <b>${BudgetOverviewView.aud(sunday)}</b> · Total <b>${BudgetOverviewView.aud(combined)}</b> / week</span>
       </button>
       ${shown ? html`<div class="day-pick" @click=${(e: Event) => e.stopPropagation()}>
         <button class="chip ${this.moveDay === 'all' ? 'on' : ''}" @click=${() => setDay('all')}>All</button>
