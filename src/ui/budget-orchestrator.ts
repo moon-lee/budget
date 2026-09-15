@@ -4,7 +4,6 @@ import { createAccount, updateAccount, setAccountActive } from '../dao/accounts.
 import { archiveFlow, saveFlow } from '../dao/flows.js';
 import { saveIncome } from '../dao/income.js';
 import { archivePot, savePot } from '../dao/pots.js';
-import { reallocate } from '../services/budget-service.js';
 import { ExtensionLogger } from 'finance-logger';
 
 const Base = typeof HTMLElement !== 'undefined' ? LitElement : (class {} as unknown as typeof LitElement);
@@ -14,8 +13,7 @@ type Tag =
   | 'budget-overview'
   | 'budget-accounts'
   | 'budget-pot-form'
-  | 'budget-flow-form'
-  | 'budget-realloc-form';
+  | 'budget-flow-form';
 
 /**
  * Single-tab orchestrator (mortgage shape): view state + pushFinance +
@@ -110,10 +108,6 @@ export class BudgetOrchestrator extends Base {
     on('flow-create', (d: any) => void this.onSaveFlow(d, false));
     on('flow-edit', (d: any) => void this.onSaveFlow(d, true));
     on('flow-form-cancel', () => this.navigate(this.returnTo));
-    // re-allocate
-    on('realloc-request', () => { this.returnTo = 'budget-overview'; this.navigate('budget-realloc-form'); });
-    on('realloc-save', (d: any) => void this.onRealloc(d));
-    on('realloc-cancel', () => this.navigate(this.returnTo));
     // accounts
     on('account-create', (d: any) => void this.onAccountCreate(d));
     on('account-edit', (d: any) => void this.onAccountEdit(d));
@@ -228,24 +222,6 @@ export class BudgetOrchestrator extends Base {
     await this.refresh();
   }
 
-  private async onRealloc(detail: any): Promise<void> {
-    if (!this.finance) return;
-    try {
-      await reallocate(
-        this.finance,
-        String(detail?.sourceKey ?? ''),
-        String(detail?.targetKey ?? ''),
-        Number(detail?.amount),
-        String(detail?.start || BudgetOrchestrator.today())
-      );
-      this.navigate(this.returnTo);
-    } catch (e: any) {
-      this.error = String(e?.message || e);
-      log.error('reallocate failed', { error: this.error });
-      (this as any).requestUpdate?.();
-    }
-  }
-
   private async onAccountCreate(input: any): Promise<void> {
     if (!this.finance) return;
     try {
@@ -295,7 +271,6 @@ export class BudgetOrchestrator extends Base {
       ${this.view === 'budget-accounts' ? html`<budget-accounts id="child"></budget-accounts>` : ''}
       ${this.view === 'budget-pot-form' ? html`<budget-pot-form id="child"></budget-pot-form>` : ''}
       ${this.view === 'budget-flow-form' ? html`<budget-flow-form id="child"></budget-flow-form>` : ''}
-      ${this.view === 'budget-realloc-form' ? html`<budget-realloc-form id="child"></budget-realloc-form>` : ''}
       </div>
     `;
   }

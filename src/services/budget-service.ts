@@ -1,7 +1,6 @@
 /**
  * Budget domain service (spec §5–§7).
  * - Dated-row close+insert via `dao/pots.ts` + `dao/flows.ts`
- * - Atomic re-allocate pair-write (source − amount, target + amount, same effective_from)
  * - Balance check: income vs savings + expenses
  * - Per-item FY totals for consumers; yearly = weekly × 52, derived on read
  * - Income live from `pay` service with `budget_income` fallback; null when missing
@@ -11,111 +10,8 @@ import { listCurrentFlows } from '../dao/flows.js';
 import { getIncome, getLatestIncome } from '../dao/income.js';
 import { archivePot, listCurrentPots, listPotHistory, savePot } from '../dao/pots.js';
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
 function yearly(weekly: number): number {
   return Math.round(weekly * 52 * 100) / 100;
-}
-
-function assertAmount(value: unknown): number {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n <= 0) {
-    throw new Error('ValidationFailed: amount must be a number > 0');
-  }
-  return n;
-}
-
-function assertDate(value: unknown, field: string): string {
-  const s = String(value ?? '');
-  if (!DATE_RE.test(s)) throw new Error(`ValidationFailed: ${field} must be YYYY-MM-DD`);
-  return s;
-}
-
-async function assertDifferentTargets(finance: any, sourceKey: string, targetKey: string): Promise<void> {
-  if (sourceKey === targetKey) throw new Error('ValidationFailed: source and target must differ');
-  const pots = await listCurrentPots(finance);
-  const src = pots.find((p) => p.pot_key === sourceKey);
-  const tgt = pots.find((p) => p.pot_key === targetKey);
-  if (!src || !tgt) throw new Error('ValidationFailed: pot not found');
-}
-
-/**
- * First-class re-allocation (§5): move $/wk from source to target with one
- * shared `effective_from`. Both sides close first, then both insert — if any
- * write fails the caller sees the error and the trace shows the pair via
- * linked notes. Throws (orchestrator surfaces it); NOT part of the
- * null-returning consumer service surface.
- */
-export async function reallocate(
-  finance: any,
-  sourceKey: string,
-  targetKey: string,
-  amountPerWeek: number,
-  start: string
-): Promise<void> {
-  const src = String(sourceKey || '').trim();
-  const tgt = String(targetKey || '').trim();
-  const amount = assertAmount(amountPerWeek);
-  const from = assertDate(start, 'effective_from');
-  await assertDifferentTargets(finance, src, tgt);
-
-  // Read both current amounts up front so validation precedes any write.
-  const pots = await listCurrentPots(finance);
-  const srcRow = pots.find((p) => p.pot_key === src)!;
-  const tgtRow = pots.find((p) => p.pot_key === tgt)!;
-  const srcWeekly = Number(srcRow.weekly_amount || 0);
-  if (srcWeekly - amount < 0) {
-    throw new Error('ValidationFailed: re-allocation would drive the source below $0/wk');
-  }
-  if (srcRow.effective_from > from || tgtRow.effective_from > from) {
-    throw new Error('ValidationFailed: new effective_from must not precede the current rows');
-  }
-
-  // Close both sides first (pair stays traceable via shared notes).
-  const table = finance.db.table('budget_pots');
-  await table.update({ id: srcRow.id }, { effective_to: from });
-  await table.update({ id: tgtRow.id }, { effective_to: from });
-
-  const note = `realloc ${from} ${src}→${tgt} $${amount}/wk`;
-  const stamp = `${from}T00:00:00`;
-  const newIds: number[] = [];
-  try {
-    const r1 = await table.insert({
-      pot_key: src,
-      label: srcRow.label,
-      kind: srcRow.kind,
-      weekly_amount: Math.round((srcWeekly - amount) * 100) / 100,
-      account_id: srcRow.account_id,
-      effective_from: from,
-      effective_to: null,
-      notes: note,
-      created_at: stamp,
-      updated_at: stamp,
-    });
-    newIds.push(Number((r1 as any)?.id));
-    const r2 = await table.insert({
-      pot_key: tgt,
-      label: tgtRow.label,
-      kind: tgtRow.kind,
-      weekly_amount: Math.round((Number(tgtRow.weekly_amount || 0) + amount) * 100) / 100,
-      account_id: tgtRow.account_id,
-      effective_from: from,
-      effective_to: null,
-      notes: note,
-      created_at: stamp,
-      updated_at: stamp,
-    });
-    newIds.push(Number((r2 as any)?.id));
-  } catch (err) {
-    // Best-effort rollback: remove any half-inserted rows, then reopen both
-    // sides so the current plan is never left half-moved or doubled.
-    for (const id of newIds) {
-      if (Number.isInteger(id)) await table.delete({ id }).catch(() => {});
-    }
-    await table.update({ id: srcRow.id }, { effective_to: null }).catch(() => {});
-    await table.update({ id: tgtRow.id }, { effective_to: null }).catch(() => {});
-    throw err;
-  }
 }
 
 /**

@@ -11,7 +11,7 @@ const Base = typeof HTMLElement !== 'undefined' ? LitElement : (class {} as unkn
 /**
  * Budget Overview (spec §3.1): income & balance cards, savings + expense
  * tables, per-row history + plan-trace section.
- * Thin: loads via Task 2 services, dispatches pot and realloc requests.
+ * Thin: loads via services, dispatches pot and flow requests.
  */
 export class BudgetOverviewView extends Base {
   static override styles = typeof HTMLElement !== 'undefined' ? [sharedStyles, css`
@@ -275,7 +275,6 @@ export class BudgetOverviewView extends Base {
             <button @click=${() => { this.addOpen = false; this.emit('flow-add-request'); }}>Pay-day move<span class="sub">Friday or Sunday</span></button>
           </div>` : ''}
         </div>
-        <button class="filter-btn" @click=${() => this.emit('realloc-request')}>Re-allocate</button></div>
       <div class="view-container"><div class="view-container-inner">
         <h1>Budget Overview</h1>
         ${this.error ? html`<p class="field-error">Error: ${this.error}</p>` : ''}
