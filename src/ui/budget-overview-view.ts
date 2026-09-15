@@ -2,14 +2,14 @@ import { LitElement, css, html } from 'lit';
 import { sharedStyles } from '../styles/shared-styles.js';
 import { accountById, resolveAccountLabel } from '../dao/accounts.js';
 import { listPotHistory } from '../dao/pots.js';
-import { balanceCheck, incomeWeekly } from '../services/budget-service.js';
+import { balanceCheck } from '../services/budget-service.js';
 import { listCurrentPots } from '../dao/pots.js';
 
 const Base = typeof HTMLElement !== 'undefined' ? LitElement : (class {} as unknown as typeof LitElement);
 
 /**
- * Budget Overview (spec §3.1): income card, savings + expense tables,
- * balance-check card, per-row history + plan-trace section.
+ * Budget Overview (spec §3.1): income & balance cards, savings + expense
+ * tables, per-row history + plan-trace section.
  * Thin: loads via Task 2 services, dispatches pot and realloc requests.
  */
 export class BudgetOverviewView extends Base {
@@ -35,7 +35,6 @@ export class BudgetOverviewView extends Base {
   finance: any = null;
   pots: any[] = [];
   accountLabels = new Map<number, any>();
-  income = 0;
   incomeManual = false;
   balance: any = null;
   trace: any[] = [];
@@ -52,17 +51,13 @@ export class BudgetOverviewView extends Base {
       this.error = '';
       this.pots = await listCurrentPots(this.finance);
       this.accountLabels = await accountById(this.finance);
-      // income: live `pay` first, manual fallback (spec §6)
-      this.incomeManual = false;
+      // income source tag: live `pay` present and positive → Salary, else manual (spec §6)
+      this.incomeManual = true;
       try {
         const stats = (await this.finance.services?.invoke?.('pay', 'getPayslipStats')) as any;
         const avg = Number(stats?.avgNet ?? NaN);
-        if (Number.isFinite(avg) && avg > 0) this.income = Math.round(avg * 100) / 100;
-        else throw new Error('no live income');
-      } catch {
-        this.income = await incomeWeekly(this.finance);
-        this.incomeManual = true;
-      }
+        if (Number.isFinite(avg) && avg > 0) this.incomeManual = false;
+      } catch { /* manual fallback */ }
       this.balance = await balanceCheck(this.finance);
       // plan trace: closed rows across all keys, newest first (cap 30)
       const all = (await this.finance.db.table('budget_pots').find({})) as any[];
@@ -114,10 +109,16 @@ export class BudgetOverviewView extends Base {
       <div class="view-container"><div class="view-container-inner">
         <h1>Budget Overview</h1>
         ${this.error ? html`<p class="field-error">Error: ${this.error}</p>` : ''}
-        <div class="section"><div class="section-header"><h3 class="section-title">Income</h3>
+        <div class="section"><div class="section-header"><h3 class="section-title">Income & balance</h3>
           ${this.incomeManual ? html`<span class="tag">Edited by hand</span>` : html`<span class="tag">Live from Salary</span>`}</div>
-          <div class="cards"><div class="card"><div class="k">Weekly</div><div class="v">${BudgetOverviewView.aud(this.income)}</div>
-          <div class="s">Yearly ≈ ${BudgetOverviewView.aud(this.income * 52)}</div></div></div>
+          <div class="cards">
+            <div class="card"><div class="k">In / week</div><div class="v">${BudgetOverviewView.aud(b.income_weekly)}</div>
+              <div class="s">Yearly ≈ ${BudgetOverviewView.aud(Number(b.income_weekly) * 52)}</div></div>
+            <div class="card"><div class="k">Out / week</div><div class="v">${BudgetOverviewView.aud(Number(b.savings_weekly) + Number(b.expenses_weekly))}</div>
+              <div class="s">Savings ${BudgetOverviewView.aud(b.savings_weekly)} + Expenses ${BudgetOverviewView.aud(b.expenses_weekly)}</div></div>
+            <div class="card"><div class="k">Balance</div><div class="v ${balanced ? 'ok' : 'bad'}">${BudgetOverviewView.aud(b.balance_weekly)}</div>
+              <div class="s">${balanced ? 'Balanced' : 'Over budget'}</div></div>
+          </div>
         </div>
         <div class="section"><div class="section-header"><h3 class="section-title">Savings pots</h3><span class="section-badge">${savings.length}</span></div>
           <div class="table-wrap"><table class="hist-table">
@@ -132,15 +133,6 @@ export class BudgetOverviewView extends Base {
             <thead><tr><th>Line</th><th>Account</th><th class="num">Weekly</th><th class="num">Yearly ×52</th><th>Since</th><th></th></tr></thead>
             <tbody>${expenses.map((p) => this.rowHtml(p))}</tbody>
           </table></div>
-        </div>
-        <div class="section"><div class="section-header"><h3 class="section-title">Balance check</h3></div>
-          <div class="cards">
-            <div class="card"><div class="k">In / week</div><div class="v">${BudgetOverviewView.aud(b.income_weekly)}</div></div>
-            <div class="card"><div class="k">Out / week</div><div class="v">${BudgetOverviewView.aud(Number(b.savings_weekly) + Number(b.expenses_weekly))}</div>
-              <div class="s">Savings ${BudgetOverviewView.aud(b.savings_weekly)} + Expenses ${BudgetOverviewView.aud(b.expenses_weekly)}</div></div>
-            <div class="card"><div class="k">Balance</div><div class="v ${balanced ? 'ok' : 'bad'}">${BudgetOverviewView.aud(b.balance_weekly)}</div>
-              <div class="s">${balanced ? 'Balanced' : 'Over budget'}</div></div>
-          </div>
         </div>
         ${this.trace.length ? html`<div class="section"><div class="section-header"><h3 class="section-title">Plan trace</h3><span class="section-badge">${this.trace.length}</span></div>
           <div class="table-wrap"><table class="hist-table">
