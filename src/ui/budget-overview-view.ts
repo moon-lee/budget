@@ -1,0 +1,157 @@
+import { LitElement, css, html } from 'lit';
+import { sharedStyles } from '../styles/shared-styles.js';
+import { accountById, resolveAccountLabel } from '../dao/accounts.js';
+import { listPotHistory } from '../dao/pots.js';
+import { balanceCheck, incomeWeekly } from '../services/budget-service.js';
+import { listCurrentPots } from '../dao/pots.js';
+
+const Base = typeof HTMLElement !== 'undefined' ? LitElement : (class {} as unknown as typeof LitElement);
+
+/**
+ * Budget Overview (spec §3.1): income card, savings + expense tables,
+ * balance-check card, per-row history + plan-trace section.
+ * Thin: loads via Task 2 services, dispatches pot and realloc requests.
+ */
+export class BudgetOverviewView extends Base {
+  static override styles = typeof HTMLElement !== 'undefined' ? [sharedStyles, css`
+    .hist-table{width:100%;border-collapse:collapse;table-layout:fixed}
+    .hist-table thead th{font-size:var(--ff-font-sm);font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ff-text-muted,#858585);text-align:left;padding:8px 10px;border-bottom:1px solid var(--ff-border,#3e3e3e);white-space:nowrap}
+    .hist-table thead th.num{text-align:right}
+    .hist-table tbody td{padding:9px 10px;border-bottom:1px solid var(--ff-border,#3e3e3e);font-size:var(--ff-font-base);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .hist-table tbody td.num{text-align:right;font-variant-numeric:tabular-nums}
+    .hist-table tbody tr:nth-child(even){background:var(--ff-bg-subpanel,#2a2a2a)}
+    .hist-table tbody tr:hover{background:var(--ff-bg-input-hover,#4a4a4a)}
+    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:4px}
+    .card{background:var(--ff-bg-subpanel,#2a2a2a);border:1px solid var(--ff-border,#3e3e3e);border-radius:8px;padding:12px 14px}
+    .card .k{font-size:var(--ff-font-sm);color:var(--ff-text-muted,#858585);text-transform:uppercase;letter-spacing:.5px}
+    .card .v{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+    .card .s{font-size:var(--ff-font-sm);opacity:.7}
+    .ok{color:var(--ff-teal,#4ec9b0)}
+    .bad{color:var(--ff-danger,#f48771)}
+    .tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 9px;border-radius:10px;border:1px solid var(--ff-border,#3e3e3e);margin-left:8px}
+    .trace{font-size:var(--ff-font-sm);opacity:.75}
+  `] as any : [];
+
+  finance: any = null;
+  pots: any[] = [];
+  accountLabels = new Map<number, any>();
+  income = 0;
+  incomeManual = false;
+  balance: any = null;
+  trace: any[] = [];
+  error = '';
+
+  async setFinance(f: any): Promise<void> {
+    this.finance = f;
+    await this.load();
+  }
+
+  async load(): Promise<void> {
+    if (!this.finance) return;
+    try {
+      this.error = '';
+      this.pots = await listCurrentPots(this.finance);
+      this.accountLabels = await accountById(this.finance);
+      // income: live `pay` first, manual fallback (spec §6)
+      this.incomeManual = false;
+      try {
+        const stats = (await this.finance.services?.invoke?.('pay', 'getPayslipStats')) as any;
+        const avg = Number(stats?.avgNet ?? NaN);
+        if (Number.isFinite(avg) && avg > 0) this.income = Math.round(avg * 100) / 100;
+        else throw new Error('no live income');
+      } catch {
+        this.income = await incomeWeekly(this.finance);
+        this.incomeManual = true;
+      }
+      this.balance = await balanceCheck(this.finance);
+      // plan trace: closed rows across all keys, newest first (cap 30)
+      const all = (await this.finance.db.table('budget_pots').find({})) as any[];
+      this.trace = all
+        .filter((r) => r.effective_to != null)
+        .sort((a, b) => (a.effective_to < b.effective_to ? 1 : -1))
+        .slice(0, 30);
+    } catch (e: any) {
+      this.error = String(e?.message || e);
+    }
+    (this as any).requestUpdate?.();
+  }
+
+  private emit(name: string, detail?: unknown): void {
+    this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
+  }
+
+  private static aud(n: unknown): string {
+    const v = Number(n);
+    return Number.isFinite(v) ? '$' + v.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
+  }
+
+  private rows(kind: string): any[] {
+    return this.pots.filter((p: any) => p.kind === kind);
+  }
+
+  private rowHtml(p: any) {
+    const acct = resolveAccountLabel(this.accountLabels, p.account_id);
+    return html`<tr>
+      <td>${p.label}</td><td>${acct ?? '—'}</td>
+      <td class="num">${BudgetOverviewView.aud(p.weekly_amount)}</td>
+      <td class="num">${BudgetOverviewView.aud(Number(p.weekly_amount || 0) * 52)}</td>
+      <td>${p.effective_from}</td>
+      <td class="actions"><button class="btn-link" @click=${() => this.emit('pot-edit-request', { key: p.pot_key })}>Edit</button><button class="btn-link" @click=${() => this.emit('pot-archive-request', { key: p.pot_key })}>Archive</button></td>
+    </tr>`;
+  }
+
+  override render(): unknown {
+    if (typeof HTMLElement === 'undefined') return html``;
+    const b = this.balance ?? { income_weekly: 0, savings_weekly: 0, expenses_weekly: 0, balance_weekly: 0 };
+    const balanced = Number(b.balance_weekly) >= 0;
+    const savings = this.rows('saving');
+    const expenses = this.rows('expense');
+    return html`
+      <div class="view-scroll">
+      <div class="topbar"><span class="crumb-current">Budget · Overview</span><div class="spacer"></div>
+        <button class="filter-btn" @click=${() => this.emit('pot-add-request')}>Add line</button>
+        <button class="filter-btn" @click=${() => this.emit('realloc-request')}>Re-allocate</button></div>
+      <div class="view-container"><div class="view-container-inner">
+        <h1>Budget Overview</h1>
+        ${this.error ? html`<p class="field-error">Error: ${this.error}</p>` : ''}
+        <div class="section"><div class="section-header"><h3 class="section-title">Income</h3>
+          ${this.incomeManual ? html`<span class="tag">Edited by hand</span>` : html`<span class="tag">Live from Salary</span>`}</div>
+          <div class="cards"><div class="card"><div class="k">Weekly</div><div class="v">${BudgetOverviewView.aud(this.income)}</div>
+          <div class="s">Yearly ≈ ${BudgetOverviewView.aud(this.income * 52)}</div></div></div>
+        </div>
+        <div class="section"><div class="section-header"><h3 class="section-title">Savings pots</h3><span class="section-badge">${savings.length}</span></div>
+          <div class="table-wrap"><table class="hist-table">
+            <colgroup><col style="width:20%"><col style="width:20%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:24%"></colgroup>
+            <thead><tr><th>Pot</th><th>Account</th><th class="num">Weekly</th><th class="num">Yearly ×52</th><th>Since</th><th></th></tr></thead>
+            <tbody>${savings.map((p) => this.rowHtml(p))}</tbody>
+          </table></div>
+        </div>
+        <div class="section"><div class="section-header"><h3 class="section-title">Expense lines</h3><span class="section-badge">${expenses.length}</span></div>
+          <div class="table-wrap"><table class="hist-table">
+            <colgroup><col style="width:20%"><col style="width:20%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:24%"></colgroup>
+            <thead><tr><th>Line</th><th>Account</th><th class="num">Weekly</th><th class="num">Yearly ×52</th><th>Since</th><th></th></tr></thead>
+            <tbody>${expenses.map((p) => this.rowHtml(p))}</tbody>
+          </table></div>
+        </div>
+        <div class="section"><div class="section-header"><h3 class="section-title">Balance check</h3></div>
+          <div class="cards">
+            <div class="card"><div class="k">In / week</div><div class="v">${BudgetOverviewView.aud(b.income_weekly)}</div></div>
+            <div class="card"><div class="k">Out / week</div><div class="v">${BudgetOverviewView.aud(Number(b.savings_weekly) + Number(b.expenses_weekly))}</div>
+              <div class="s">Savings ${BudgetOverviewView.aud(b.savings_weekly)} + Expenses ${BudgetOverviewView.aud(b.expenses_weekly)}</div></div>
+            <div class="card"><div class="k">Balance</div><div class="v ${balanced ? 'ok' : 'bad'}">${BudgetOverviewView.aud(b.balance_weekly)}</div>
+              <div class="s">${balanced ? 'Balanced' : 'Over budget'}</div></div>
+          </div>
+        </div>
+        ${this.trace.length ? html`<div class="section"><div class="section-header"><h3 class="section-title">Plan trace</h3><span class="section-badge">${this.trace.length}</span></div>
+          <div class="table-wrap"><table class="hist-table">
+            <thead><tr><th>Item</th><th class="num">Weekly</th><th>From</th><th>To</th><th>Note</th></tr></thead>
+            <tbody>${this.trace.map((r: any) => html`<tr class="trace">
+              <td>${r.label}</td><td class="num">${BudgetOverviewView.aud(r.weekly_amount)}</td>
+              <td>${r.effective_from}</td><td>${r.effective_to}</td><td>${r.notes ?? ''}</td>
+            </tr>`)}</tbody>
+          </table></div></div>` : ''}
+      </div></div>
+      </div>
+    `;
+  }
+}
