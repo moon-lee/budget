@@ -89,12 +89,23 @@
   border-bottom: 1px solid var(--ff-border, #3e3e3e);
   padding: 10px 20px;
   display: flex;
-  align-items: center;
-  gap: 12px;
+  justify-content: center;
   position: sticky;
   top: 0;
   z-index: 10;
   flex-shrink: 0;
+}
+.topbar-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 1080px;
+}
+@media (max-width: 1100px) {
+  .topbar-inner {
+    max-width: 100%;
+  }
 }
 .topbar .crumb-link {
   color: var(--ff-accent, #007acc);
