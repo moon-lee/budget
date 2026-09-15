@@ -1,0 +1,84 @@
+/* ============================================================
+   Design Tokens — salary-history extension palette.
+   Single source of truth for colours, spacing, typography, and
+   component-level theming. Mirrors the main app token vocabulary
+   via --ff-* custom properties used in shared-styles.ts.
+   ============================================================ */
+
+:root {
+  /* Surfaces */
+  --ff-bg-base: #1e1e1e;
+  --ff-bg-panel: #252526;
+  --ff-bg-subpanel: #2a2a2a;
+  --ff-bg-input: #3c3c3c;
+  --ff-bg-input-hover: #4a4a4a;
+  --ff-border: #3e3e3e;
+
+  /* Accent */
+  --ff-accent: #007acc;
+  --ff-accent-hover: #1177bb;
+  --ff-teal: #4ec9b0;
+
+  /* Typography */
+  --ff-text: #d4d4d4;
+  --ff-text-strong: #ffffff;
+  --ff-text-muted: #858585;
+
+  /* Semantic */
+  --ff-danger: #f48771;
+  --ff-warning: #cca700;
+  --ff-warning-text: #ffd866;
+  --ff-warning-bg: #3a2e0a;
+  --ff-success: #4ec9b0;
+
+  /* Scrollbar */
+  --ff-scrollbar-thumb: #5a5a5a;
+  --ff-scrollbar-thumb-hover: #6a6a6a;
+
+  /* Spacing scale */
+  --ff-space-1: 4px;
+  --ff-space-2: 8px;
+  --ff-space-3: 12px;
+  --ff-space-4: 16px;
+  --ff-space-5: 20px;
+  --ff-space-6: 24px;
+  --ff-space-8: 32px;
+
+  /* Typography scale */
+  --ff-font-xs: 11px;
+  --ff-font-sm: 12px;
+  --ff-font-md: 13px;
+  --ff-font-base: 14px;
+  --ff-font-lg: 15px;
+  --ff-font-xl: 17px;
+  --ff-font-2xl: 19px;
+  --ff-font-3xl: 21px;
+
+  /* Radius */
+  --ff-radius-sm: 3px;
+  --ff-radius-md: 4px;
+  --ff-radius-lg: 6px;
+  --ff-radius-xl: 8px;
+}
+
+body.light-theme {
+  --ff-bg-base: #f8fafc;
+  --ff-bg-panel: #ffffff;
+  --ff-bg-subpanel: #f1f5f9;
+  --ff-bg-input: #ffffff;
+  --ff-bg-input-hover: #f1f5f9;
+  --ff-border: #cbd5e1;
+  --ff-accent: #6366f1;
+  --ff-accent-hover: #4f46e5;
+  --ff-teal: #0d9488;
+  --ff-text: #475569;
+  --ff-text-strong: #0f172a;
+  --ff-text-muted: #64748b;
+  --ff-danger: #ef4444;
+  --ff-warning: #f59e0b;
+  --ff-warning-text: #92400e;
+  --ff-warning-bg: #fef3c7;
+  --ff-success: #0d9488;
+  --ff-scrollbar-thumb: #c1c1c1;
+  --ff-scrollbar-thumb-hover: #a8a8a8;
+}

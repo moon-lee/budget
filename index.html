@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Budget — dev</title>
+    <link rel="stylesheet" href="/src/styles/ext-tokens.css" />
+    <style>
+      #view-switcher { position:fixed; top:8px; right:8px; z-index:9999; padding:4px 8px;
+        font-size:12px; background:var(--ff-bg-secondary,#1e1e1e); color:var(--ff-text-primary,#ccc);
+        border:1px solid var(--ff-border,#444); border-radius:4px; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <select id="view-switcher"></select>
+    <script type="module">
+      import '/src/ui/index.ts';
+      import { createMockFinance } from '/src/mock/finance-mock.ts';
+      import * as main from '/src/main.ts';
+
+      // ---- add view tags here when you create new views ----
+      const VIEWS = [
+        { tag: 'budget-view', label: 'Budget' },
+        // { tag: 'budget-detail-view', label: 'Detail View' },
+      ];
+
+      const switcher = document.getElementById('view-switcher');
+      VIEWS.forEach((v, i) => {
+        const opt = document.createElement('option');
+        opt.value = i; opt.text = v.label;
+        switcher.appendChild(opt);
+      });
+
+      const finance = createMockFinance();
+      let current = null;
+
+      async function mountView(index) {
+        if (current) { current.remove(); current = null; }
+        const v = VIEWS[index];
+        const el = document.createElement(v.tag);
+        document.getElementById('app').appendChild(el);
+        current = el;
+        if (typeof main.activate === 'function') await main.activate(finance, { viewId: v.tag.replace('-view', '') });
+      }
+
+      switcher.addEventListener('change', (e) => mountView(+e.target.value));
+      await mountView(0);
+    </script>
+  </body>
+</html>
