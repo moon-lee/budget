@@ -68,7 +68,7 @@ export class BudgetFlowForm extends Base {
     const today = new Date().toISOString().slice(0, 10);
     return html`
       <div class="view-scroll">
-      <div class="topbar"><div class="topbar-inner"><span class="crumb-current">Budget · ${isEdit ? 'Edit move' : 'Add move'}</span></div></div>
+      <div class="topbar"><span class="crumb-current">Budget · ${isEdit ? 'Edit move' : 'Add move'}</span></div>
       <div class="view-container"><div class="view-container-inner">
         <h1>${isEdit ? 'Edit move' : 'Add move'}</h1>
         ${this.error ? html`<p class="field-error">Error: ${this.error}</p>` : ''}

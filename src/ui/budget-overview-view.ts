@@ -267,7 +267,7 @@ export class BudgetOverviewView extends Base {
     const expenses = this.rows('expense');
     return html`
       <div class="view-scroll">
-      <div class="topbar"><div class="topbar-inner"><span class="crumb-current">Budget · Overview</span><div class="spacer"></div>
+      <div class="topbar"><span class="crumb-current">Budget · Overview</span><div class="spacer"></div>
         <div class="add-wrap">
           <button class="filter-btn" @click=${() => { this.addOpen = !this.addOpen; (this as any).requestUpdate?.(); }}>Add ▾</button>
           ${this.addOpen ? html`<div class="add-menu">
@@ -275,7 +275,7 @@ export class BudgetOverviewView extends Base {
             <button @click=${() => { this.addOpen = false; this.emit('flow-add-request'); }}>Pay-day move<span class="sub">Friday or Sunday</span></button>
           </div>` : ''}
         </div>
-      </div></div>
+      </div>
       <div class="view-container"><div class="view-container-inner">
         <h1>Budget Overview</h1>
         ${this.error ? html`<p class="field-error">Error: ${this.error}</p>` : ''}
