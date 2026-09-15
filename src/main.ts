@@ -1,35 +1,67 @@
 import type { FinanceApi } from 'finance';
 import { ExtensionLogger } from 'finance-logger';
 import './styles/ext-tokens.css';
+import { seedBudget } from './services/seed.js';
+import { flowYearly, potYearly, totals } from './services/budget-service.js';
+
 const logger = new ExtensionLogger('budget');
-export async function registerUIComponents(): Promise<void> { if (typeof window !== 'undefined') await import('./ui/index.js'); }
+
+export async function registerUIComponents(): Promise<void> {
+  if (typeof window !== 'undefined') await import('./ui/index.js');
+}
+
 let _finance: FinanceApi | null = null;
+
+function openView(tag: string): () => Promise<void> {
+  return async () => {
+    if (!_finance) return;
+    // Single panel identity ('budget' → tab always "Budget"); target child rides in mountData.view.
+    await _finance.ui?.requestMount('budget', { view: tag });
+  };
+}
+
 export async function activate(finance: FinanceApi, ctx: { viewId?: string } & Record<string, unknown> = {}): Promise<void> {
   _finance = finance;
   logger.info('activate budget', { viewId: ctx.viewId });
-  // Single panel identity ('budget' → tab always "Budget"); extra screens ride as mountData.view.
-  const openView = (childTag: string): (() => Promise<void>) => async () => {
-    await finance.ui?.requestMount('budget', { view: childTag });
-  };
-  finance.commands.registerCommand('budget.hello', 'Budget: Hello', () => openView('budget-view')());
-  // Example Domain Service — other extensions can call finance.services.invoke('budget','hello')
-  // When you add tables (e.g. budget_items), add methods that use finance.db.table('budget_items').find/count/insert
+  await seedBudget(finance as any);
+
+  finance.commands.registerCommand('budget.show-overview', 'Budget: Overview', openView('budget-overview'));
+  finance.commands.registerCommand('budget.show-flows', 'Budget: Flow Planner', openView('budget-flows'));
+  finance.commands.registerCommand('budget.show-accounts', 'Budget: Accounts', openView('budget-accounts'));
+
   finance.services.register('budget', {
-    hello: async (p?: unknown) => `Hello from budget: ${JSON.stringify(p ?? {})}`,
+    potYearly: async (p?: any) => potYearly(finance as any, (p as any)?.key),
+    flowYearly: async (p?: any) => flowYearly(finance as any, (p as any)?.key),
+    totals: async () => totals(finance as any),
   });
+
   if (typeof window !== 'undefined') await import('./ui/index.js');
   if (ctx.viewId && typeof document !== 'undefined') {
     const app = document.getElementById('app');
     if (app) {
-      // Without an orchestrator, mount the single view directly. When you add a
-      // second child view (AGENTS.md §5b), replace this with a 'budget-orchestrator'
-      // element that maps mount.view → child tag and handles 'mount-update' retargets.
-      const viewEl = document.createElement('budget-view') as any;
+      const el = document.createElement('budget-orchestrator') as any;
       app.innerHTML = '';
-      app.appendChild(viewEl);
-      queueMicrotask(() => { if (typeof viewEl.setFinance === 'function') viewEl.setFinance(finance); else viewEl.finance = finance; });
-      setTimeout(() => { if (viewEl.finance == null && typeof viewEl.setFinance === 'function') viewEl.setFinance(finance); }, 50);
+      app.appendChild(el);
+      const baseData = { viewId: ctx.viewId, ...(ctx as Record<string, unknown>) };
+      const mountEl = () => {
+        if (typeof el.init === 'function') void el.init(finance, baseData);
+        else if (typeof el.setFinance === 'function') void el.setFinance(finance);
+        else el.finance = finance;
+      };
+      queueMicrotask(mountEl);
+      setTimeout(() => {
+        if (el.finance == null && typeof el.setFinance === 'function') void el.setFinance(finance);
+      }, 50);
+      // Retargets to the open panel (sidebar nav while mounted) arrive here from panel-bootstrap.
+      app.addEventListener('mount-update', (e: Event) => {
+        const detail = (e as CustomEvent).detail as Record<string, unknown>;
+        if (typeof el.init === 'function') void el.init(finance, { ...baseData, ...(detail ?? {}) });
+      });
     }
   }
 }
-export function deactivate(): void { if (_finance) _finance.services.unregister('budget'); logger.info('deactivate budget'); }
+
+export function deactivate(): void {
+  if (_finance) _finance.services.unregister('budget');
+  logger.info('deactivate budget');
+}

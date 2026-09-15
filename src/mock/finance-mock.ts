@@ -11,9 +11,9 @@ export function createMockFinance(): import('finance').FinanceApi {
     return {
       find: async (filter = {}) => [...m.values()].filter(r => Object.entries(filter).every(([k,v]) => r[k]===v)),
       findOne: async (filter = {}) => [...m.values()].find(r => Object.entries(filter).every(([k,v])=> r[k]===v)) ?? null,
-      insert: async (row) => { const id = nextId++; const r = { id, ...row }; m.set(id, r); return { id }; },
-      update: async (filter, patch) => { let n=0; for (const [id,r] of m) if (Object.entries(filter).every(([k,v])=>r[k]===v)) { m.set(id,{...r,...patch}); n++; } return { affected: n }; },
-      delete: async (filter) => { let n=0; for (const [id,r] of m) if (Object.entries(filter).every(([k,v])=>r[k]===v)) { m.delete(id); n++; } return { affected: n }; },
+      insert: async (row: Record<string, unknown>) => { const id = nextId++; const r = { id, ...row }; m.set(id, r); return { id }; },
+      update: async (filter: Record<string, unknown>, patch: Record<string, unknown>) => { let n=0; for (const [id,r] of m) if (Object.entries(filter).every(([k,v])=>r[k]===v)) { m.set(id,{...r,...patch}); n++; } return { affected: n }; },
+      delete: async (filter: Record<string, unknown>) => { let n=0; for (const [id,r] of m) if (Object.entries(filter).every(([k,v])=>r[k]===v)) { m.delete(id); n++; } return { affected: n }; },
       count: async (filter = {}) => [...m.values()].filter(r => Object.entries(filter).every(([k,v])=>r[k]===v)).length,
     };
   };
