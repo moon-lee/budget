@@ -70,7 +70,7 @@ In `D:/finance_flow_ext/budget/package.json`, set `financeExtension` to:
       { "key": "budget.themeColor", "type": "string", "label": "Accent color (hex).", "default": "#22C55E", "pattern": "^#[0-9A-Fa-f]{6}$", "formatHint": "#RRGGBB", "placeholder": "#22C55E" }
     ],
     "allowedCommands": ["budget.show-overview", "budget.show-flows", "budget.show-accounts"],
-    "allowedUiEvents": ["pot-add-request", "pot-create", "pot-edit-request", "pot-edit", "pot-form-cancel", "flow-add-request", "flow-create", "flow-edit-request", "flow-edit", "flow-form-cancel", "realloc-request", "realloc-save", "realloc-cancel", "account-create", "account-edit", "account-toggle"]
+    "allowedUiEvents": ["pot-add-request", "pot-create", "pot-edit-request", "pot-edit", "pot-archive-request", "pot-form-cancel", "flow-add-request", "flow-create", "flow-edit-request", "flow-edit", "flow-archive-request", "flow-form-cancel", "realloc-request", "realloc-save", "realloc-cancel", "account-create", "account-edit", "account-toggle"]
   },
   "tables": [<spec §4.0 budget_accounts JSON>, <spec §4.1 budget_pots JSON>, <spec §4.2 budget_flows JSON>, <spec §4.4 budget_income JSON>],
   "main": "src/main.ts"
@@ -239,7 +239,7 @@ git add src/dao src/services && git commit -m "feat(budget): dao and plan-histor
 
 - [ ] **Step 1: Write the orchestrator**
 
-Mirror `extensions/salary-history/src/ui/salary-orchestrator.ts`: `BudgetOrchestrator extends Base`, `view: 'budget-overview' | 'budget-flows' | 'budget-accounts' | 'budget-pot-form' | 'budget-flow-form' | 'budget-realloc-form'`, `init` mapping `mount.view ?? mount.viewId` (default `budget-overview`), `pushFinance` injecting `finance` + calling child `load()`, `connectedCallback` listeners for the 16 `allowedUiEvents`, handlers calling Task 2 services then `navigate(returnTo)` + refresh. Re-allocate handler calls `reallocate()` (pair-write, §5 atomicity). Account handlers call `createAccount` / `renameAccount` / `setAccountActive` from `dao/accounts.ts`.
+Mirror `extensions/salary-history/src/ui/salary-orchestrator.ts`: `BudgetOrchestrator extends Base`, `view: 'budget-overview' | 'budget-flows' | 'budget-accounts' | 'budget-pot-form' | 'budget-flow-form' | 'budget-realloc-form'`, `init` mapping `mount.view ?? mount.viewId` (default `budget-overview`), `pushFinance` injecting `finance` + calling child `load()`, `connectedCallback` listeners for the 18 `allowedUiEvents`, handlers calling Task 2 services then `navigate(returnTo)` + refresh. Re-allocate handler calls `reallocate()` (pair-write, §5 atomicity). Account handlers call `createAccount` / `renameAccount` / `setAccountActive` from `dao/accounts.ts`.
 
 - [ ] **Step 2: Write the views**
 
@@ -295,6 +295,6 @@ cd D:/finance_flow_ext/budget && git add -A && git commit -m "feat(budget): inst
 ## Self-Review
 
 - **Spec coverage:** main rule (§1) → Tasks 2–3 (dated rows + re-allocate pair); sheet map (§2) → Task 1 seeds; 3 screens (§3) → Task 3; tables (§4.0–§4.4 incl. accounts master + FK) → Tasks 1–2; history rules (§5, incl. accounts stable-master rule) → Task 2; income (§6) + sharing (§7) → Task 2 services; navigation (§8, 3 commands + account events) → Tasks 1+3; SDK path (§9) → Tasks 1+4. All covered.
-- **Amendment 2026-09-15:** `budget_accounts` master + `account_id` FK (spec §4.0, pots/flows §4.1–§4.2, income renumbered §4.4); Task 1 manifest/seed, Task 2 `dao/accounts.ts` + FK validation, Task 3 `budget-accounts-view` + dropdowns, Task 4 checklist updated.
+- **Amendment 2026-09-15:** `budget_accounts` master + `account_id` FK (spec §4.0, pots/flows §4.1–§4.2, income renumbered §4.4); Task 1 manifest/seed, Task 2 `dao/accounts.ts` + FK validation, Task 3 `budget-accounts-view` + dropdowns + `pot/flow-archive-request` events (18 total), Task 4 install-verified.
 - **Placeholder scan:** no TBD/TODO; every step has exact paths, code, commands, expected output.
 - **Type consistency:** `pot_key`/`flow_key`/`finance_year` keys, `weekly_amount` numbers, `MortgageCard`-style per-item returns consistent across tasks.
