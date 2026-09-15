@@ -31,8 +31,14 @@ export class BudgetOverviewView extends Base {
     .tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 9px;border-radius:10px;border:1px solid var(--ff-border,#3e3e3e);margin-left:8px}
     .trace{font-size:var(--ff-font-sm);opacity:.75}
     .section-header .spacer{flex:1}
-    .summary{display:flex;align-items:baseline;gap:16px;padding:8px 10px;margin-bottom:8px;background:var(--ff-bg-subpanel,#2a2a2a);border:1px solid var(--ff-border,#3e3e3e);border-radius:8px;font-size:var(--ff-font-base)}
-    .summary .num{font-variant-numeric:tabular-nums;font-weight:700}
+    .group-head{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;margin:0 0 8px;background:var(--ff-bg-subpanel,#2a2a2a);border:1px solid var(--ff-border,#3e3e3e);border-radius:8px;color:var(--ff-text,#d4d4d4);font-size:var(--ff-font-base);cursor:pointer;text-align:left}
+    .group-head:hover{background:var(--ff-bg-input-hover,#4a4a4a)}
+    .group-head .chev{display:inline-flex;flex:0 0 auto;color:var(--ff-text-muted,#858585);transition:transform .12s ease}
+    .group-head .chev svg{display:block}
+    .group-head.open .chev{transform:rotate(90deg)}
+    .group-head .t{font-weight:700}
+    .group-head .sum{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--ff-text-muted,#858585);font-size:var(--ff-font-sm)}
+    .group-head .sum b{color:var(--ff-text,#d4d4d4)}
   `] as any : [];
 
   finance: any = null;
@@ -95,10 +101,13 @@ export class BudgetOverviewView extends Base {
 
   private summaryHtml(title: string, colLabel: string, rows: any[], shown: boolean, toggle: () => void, colGroup: unknown) {
     const total = BudgetOverviewView.sumWeekly(rows);
-    return html`<div class="section"><div class="section-header"><h3 class="section-title">${title}</h3>
-        <span class="section-badge">${rows.length}</span><div class="spacer"></div>
-        <button class="filter-btn" @click=${toggle}>${shown ? 'Hide' : 'Show'}</button></div>
-      <div class="summary"><span>Total</span><span class="num">${BudgetOverviewView.aud(total)} / week</span><span class="num">${BudgetOverviewView.aud(total * 52)} / year</span></div>
+    return html`<div class="section">
+      <button class="group-head ${shown ? 'open' : ''}" @click=${toggle} aria-expanded=${shown ? 'true' : 'false'}>
+        <span class="chev"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <span class="t">${title}</span>
+        <span class="section-badge">${rows.length}</span>
+        <span class="sum"><b>${BudgetOverviewView.aud(total)}</b> / week · ${BudgetOverviewView.aud(total * 52)} / year</span>
+      </button>
       ${shown ? html`<div class="table-wrap"><table class="hist-table">
         <colgroup>${colGroup}</colgroup>
         <thead><tr><th>${colLabel}</th><th>Account</th><th class="num">Weekly</th><th class="num">Yearly ×52</th><th>Since</th><th></th></tr></thead>
