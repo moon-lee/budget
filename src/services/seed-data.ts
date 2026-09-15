@@ -11,16 +11,16 @@ export interface SeedAccount {
 
 export const SEED_ACCOUNTS: ReadonlyArray<SeedAccount> = [
   { account_key: '5272', bank: 'NAB SAVING', label: 'Emergency', sort_order: 1 },
-  { account_key: '0743', bank: null, label: 'Child', sort_order: 2 },
-  { account_key: '8107', bank: null, label: 'Solar', sort_order: 3 },
-  { account_key: '4323', bank: null, label: 'Investment', sort_order: 4 },
-  { account_key: '3545', bank: null, label: 'New Car', sort_order: 5 },
-  { account_key: '9722', bank: null, label: 'Emergency 2', sort_order: 6 },
+  { account_key: '0743', bank: 'NAB SAVING', label: 'Child', sort_order: 2 },
+  { account_key: '8107', bank: 'NAB SAVING', label: 'Solar', sort_order: 3 },
+  { account_key: '4323', bank: 'NAB SAVING', label: 'Investment', sort_order: 4 },
+  { account_key: '3545', bank: 'NAB SAVING', label: 'New Car', sort_order: 5 },
+  { account_key: '9722', bank: 'NAB SAVING', label: 'Emergency 2', sort_order: 6 },
   { account_key: '3564', bank: 'NAB SAVING', label: 'Bills hub', sort_order: 7 },
-  { account_key: 'nab-offset', bank: 'NAB OFFSET', label: 'Mortgage / Bills hub', sort_order: 8 },
-  { account_key: 'boq', bank: 'BOQ', label: 'Family Fund', sort_order: 9 },
-  { account_key: 'macquarie', bank: 'MACQUARIE', label: 'Home Expenses', sort_order: 10 },
-  { account_key: 'ubank', bank: 'UBANK', label: 'Emergency 3', sort_order: 11 },
+  { account_key: '0390', bank: 'NAB OFFSET', label: 'Mortgage / Bills hub', sort_order: 8 },
+  { account_key: '2730', bank: 'BOQ', label: 'Family Fund', sort_order: 9 },
+  { account_key: '3804', bank: 'MACQUARIE', label: 'Home Expenses', sort_order: 10 },
+  { account_key: '9282', bank: 'UBANK', label: 'Private Fund', sort_order: 11 },
 ];
 
 export interface SeedPot {
@@ -39,11 +39,11 @@ export const SEED_POTS: ReadonlyArray<SeedPot> = [
   { pot_key: 'solar', label: 'Solar', kind: 'saving', weekly_amount: 50, account: '8107' },
   { pot_key: 'investment', label: 'Investment', kind: 'saving', weekly_amount: 50, account: '4323' },
   { pot_key: 'new-car', label: 'New Car', kind: 'saving', weekly_amount: 20, account: '3545' },
-  { pot_key: 'family-fund', label: 'Family Fund', kind: 'saving', weekly_amount: 10, account: 'boq' },
-  { pot_key: 'home-expenses', label: 'Home Expenses', kind: 'saving', weekly_amount: 10, account: 'macquarie' },
-  { pot_key: 'emergency-3', label: 'Emergency 3', kind: 'saving', weekly_amount: 10, account: 'ubank' },
+  { pot_key: 'family-fund', label: 'Family Fund', kind: 'saving', weekly_amount: 10, account: '2730' },
+  { pot_key: 'home-expenses', label: 'Home Expenses', kind: 'saving', weekly_amount: 10, account: '3804' },
+  { pot_key: 'emergency-3', label: 'Private Fund', kind: 'saving', weekly_amount: 10, account: '9282' },
   { pot_key: 'emergency-2', label: 'Emergency 2', kind: 'saving', weekly_amount: 10, account: '9722' },
-  { pot_key: 'mortgage', label: 'Mortgage', kind: 'saving', weekly_amount: 400, account: 'nab-offset' },
+  { pot_key: 'mortgage', label: 'Mortgage', kind: 'saving', weekly_amount: 400, account: '0390' },
   // Expense lines (sheet rows 19–28): $500/wk, no bank
   { pot_key: 'power-bill', label: 'Power Bill', kind: 'expense', weekly_amount: 50, account: null },
   { pot_key: 'car-rego-insurance', label: 'Car Rego & Insurance', kind: 'expense', weekly_amount: 100, account: null },
@@ -68,8 +68,8 @@ export interface SeedFlow {
 
 export const SEED_FLOWS: ReadonlyArray<SeedFlow> = [
   // Friday pay-day moves (sheet col G/H rows 2–6)
-  { flow_key: 'friday-mortgage', day: 'friday', label: 'Mortgage', weekly_amount: 400, account: 'nab-offset' },
-  { flow_key: 'friday-bill-big4', day: 'friday', label: 'Bill-Big4', weekly_amount: 280, account: 'nab-offset' },
+  { flow_key: 'friday-mortgage', day: 'friday', label: 'Mortgage', weekly_amount: 400, account: '0390' },
+  { flow_key: 'friday-bill-big4', day: 'friday', label: 'Bill-Big4', weekly_amount: 280, account: '0390' },
   { flow_key: 'friday-car-fuel', day: 'friday', label: 'Car Fuel', weekly_amount: 50, account: '3564' },
   { flow_key: 'friday-bills', day: 'friday', label: 'Bills', weekly_amount: 170, account: '3564' },
   // Sunday moves (sheet col G/H rows 8–19)
@@ -79,7 +79,7 @@ export const SEED_FLOWS: ReadonlyArray<SeedFlow> = [
   { flow_key: 'sunday-emergency-2', day: 'sunday', label: 'Emergency 2', weekly_amount: 10, account: '9722' },
   { flow_key: 'sunday-car', day: 'sunday', label: 'Car', weekly_amount: 20, account: '3545' },
   { flow_key: 'sunday-child', day: 'sunday', label: 'Child', weekly_amount: 10, account: '0743' },
-  { flow_key: 'sunday-home', day: 'sunday', label: 'Home', weekly_amount: 10, account: 'macquarie' },
-  { flow_key: 'sunday-family', day: 'sunday', label: 'Family', weekly_amount: 10, account: 'boq' },
-  { flow_key: 'sunday-emergency-3', day: 'sunday', label: 'Emergency', weekly_amount: 10, account: 'ubank' },
+  { flow_key: 'sunday-home', day: 'sunday', label: 'Home', weekly_amount: 10, account: '3804' },
+  { flow_key: 'sunday-family', day: 'sunday', label: 'Family', weekly_amount: 10, account: '2730' },
+  { flow_key: 'sunday-emergency-3', day: 'sunday', label: 'Private Fund', weekly_amount: 10, account: '9282' },
 ];

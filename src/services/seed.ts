@@ -9,8 +9,26 @@ async function count(finance: any, table: string): Promise<number> {
 }
 
 /**
+ * Key migration 2026-09-16 (spec §4 $4 update): placeholder slugs → real
+ * suffixes, banks filled in, Emergency 3 → Private Fund. FKs point at `id`,
+ * so renames are safe for existing installs; user-created rows untouched.
+ */
+const KEY_MIGRATION: ReadonlyArray<{ from: string; to: string; bank?: string | null; label?: string }> = [
+  { from: '0743', to: '0743', bank: 'NAB SAVING' },
+  { from: '8107', to: '8107', bank: 'NAB SAVING' },
+  { from: '4323', to: '4323', bank: 'NAB SAVING' },
+  { from: '3545', to: '3545', bank: 'NAB SAVING' },
+  { from: '9722', to: '9722', bank: 'NAB SAVING' },
+  { from: 'nab-offset', to: '0390' },
+  { from: 'boq', to: '2730' },
+  { from: 'macquarie', to: '3804' },
+  { from: 'ubank', to: '9282', label: 'Private Fund' },
+];
+
+/**
  * Once-only seeder (runs on every activate, seeds only what's missing).
- * - accounts: inserted when `budget_accounts` is empty (never re-seeded)
+ * - accounts: inserted when `budget_accounts` is empty (never re-seeded);
+ *   existing installs are migrated to the current SEED_ACCOUNTS below
  * - pots/flows: inserted when their tables are empty, with `account_id`
  *   resolved by `account_key` lookup (NULL where §2 names no account)
  * - `budget_income`: never seeded (only on manual fallback use)
@@ -22,6 +40,8 @@ export async function seedBudget(finance: any): Promise<void> {
       // what's given — never rely on the manifest default here.
       await finance.db.table('budget_accounts').insert({ ...a, bank: a.bank ?? null, is_active: true });
     }
+  } else {
+    await migrateAccountKeys(finance);
   }
 
   const accounts = (await finance.db.table('budget_accounts').find({})) as any[];
@@ -55,5 +75,24 @@ export async function seedBudget(finance: any): Promise<void> {
         notes: null,
       });
     }
+  }
+}
+
+async function migrateAccountKeys(finance: any): Promise<void> {
+  const rows = (await finance.db.table('budget_accounts').find({})) as any[];
+  const byKey = new Map<string, any>(rows.map((r) => [r.account_key, r]));
+  for (const m of KEY_MIGRATION) {
+    const row = byKey.get(m.from);
+    // Skip when: old key absent, or target key already taken by another row.
+    if (!row) continue;
+    if (m.from !== m.to && byKey.has(m.to)) continue;
+    const patch: Record<string, unknown> = {};
+    if (m.from !== m.to) patch.account_key = m.to;
+    if (m.bank !== undefined && (row.bank ?? null) !== m.bank) patch.bank = m.bank;
+    if (m.label !== undefined && row.label !== m.label) patch.label = m.label;
+    if (Object.keys(patch).length === 0) continue;
+    await finance.db.table('budget_accounts').update({ id: row.id }, patch);
+    byKey.delete(m.from);
+    byKey.set(m.to, { ...row, ...patch });
   }
 }
