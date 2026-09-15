@@ -14,15 +14,15 @@ async function count(finance: any, table: string): Promise<number> {
  * so renames are safe for existing installs; user-created rows untouched.
  */
 const KEY_MIGRATION: ReadonlyArray<{ from: string; to: string; bank?: string | null; label?: string }> = [
-  { from: '0743', to: '0743', bank: 'NAB SAVING' },
-  { from: '8107', to: '8107', bank: 'NAB SAVING' },
-  { from: '4323', to: '4323', bank: 'NAB SAVING' },
-  { from: '3545', to: '3545', bank: 'NAB SAVING' },
-  { from: '9722', to: '9722', bank: 'NAB SAVING' },
-  { from: 'nab-offset', to: '0390' },
-  { from: 'boq', to: '2730' },
-  { from: 'macquarie', to: '3804' },
-  { from: 'ubank', to: '9282', label: 'Private Fund' },
+  { from: '0743', to: '0743', bank: 'NAB SAVING', label: 'Child' },
+  { from: '8107', to: '8107', bank: 'NAB SAVING', label: 'Solar' },
+  { from: '4323', to: '4323', bank: 'NAB SAVING', label: 'Investment' },
+  { from: '3545', to: '3545', bank: 'NAB SAVING', label: 'New Car' },
+  { from: '9722', to: '9722', bank: 'NAB SAVING', label: 'Emergency 2' },
+  { from: 'nab-offset', to: '0390', bank: 'NAB OFFSET', label: 'Mortgage / Bills hub' },
+  { from: 'boq', to: '2730', bank: 'BOQ', label: 'Family Fund' },
+  { from: 'macquarie', to: '3804', bank: 'MACQUARIE', label: 'Home Expenses' },
+  { from: 'ubank', to: '9282', bank: 'UBANK', label: 'Private Fund' },
 ];
 
 /**
