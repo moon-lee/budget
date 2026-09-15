@@ -77,6 +77,7 @@ export class BudgetOverviewView extends Base {
   selSavings = new Set<string>();
   selExpenses = new Set<string>();
   selMoves = new Set<string>();
+  showTrace = false;
   /** Which selection is mid-confirm: null | 'savings' | 'expenses' | 'moves'. */
   private confirmKey: string | null = null;
   /** Bumped on every selection change so checkbox bindings re-apply. */
@@ -300,14 +301,21 @@ export class BudgetOverviewView extends Base {
         ${this.summaryHtml('Expense lines', 'Line', expenses, this.showExpenses, () => { this.showExpenses = !this.showExpenses; (this as any).requestUpdate?.(); }, this.selExpenses, 'pot-edit-request', 'pot-archive-request', 'pot-archive-bulk', 'expenses')}
         </div>
         ${this.movesHtml()}
-        ${this.trace.length ? html`<div class="section"><div class="section-header"><h3 class="section-title">Plan trace</h3><span class="section-badge">${this.trace.length}</span></div>
-          <div class="table-wrap"><table class="hist-table">
+        ${this.trace.length ? html`<div class="section">
+          <button class="group-head ${this.showTrace ? 'open' : ''}" @click=${() => { this.showTrace = !this.showTrace; (this as any).requestUpdate?.(); }} aria-expanded=${this.showTrace ? 'true' : 'false'}>
+            <span class="chev"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <span class="t">Plan trace</span>
+            <span class="section-badge">${this.trace.length}</span>
+            <span class="sum">Closed history rows</span>
+          </button>
+          ${this.showTrace ? html`<div class="table-wrap"><table class="hist-table">
             <thead><tr><th>Item</th><th class="num">Weekly</th><th>From</th><th>To</th><th>Note</th></tr></thead>
             <tbody>${this.trace.map((r: any) => html`<tr class="trace">
               <td>${r.label}</td><td class="num">${BudgetOverviewView.aud(r.weekly_amount)}</td>
               <td>${r.effective_from}</td><td>${r.effective_to}</td><td>${r.notes ?? ''}</td>
             </tr>`)}</tbody>
-          </table></div></div>` : ''}
+          </table></div>` : ''}
+        </div>` : ''}
       </div></div>
       </div>
     `;
