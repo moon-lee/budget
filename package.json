@@ -25,7 +25,7 @@
         { "key": "budget.themeColor", "type": "string", "label": "Accent color (hex).", "default": "#EA580C", "pattern": "^#[0-9A-Fa-f]{6}$", "formatHint": "#RRGGBB", "placeholder": "#EA580C" }
       ],
       "allowedCommands": ["budget.show-overview", "budget.show-accounts"],
-      "allowedUiEvents": ["pot-add-request", "pot-create", "pot-edit-request", "pot-edit", "pot-archive-request", "pot-form-cancel", "flow-add-request", "flow-create", "flow-edit-request", "flow-edit", "flow-archive-request", "flow-form-cancel", "realloc-request", "realloc-save", "realloc-cancel", "account-create", "account-edit", "account-toggle"]
+      "allowedUiEvents": ["pot-add-request", "pot-create", "pot-edit-request", "pot-edit", "pot-archive-request", "pot-archive-bulk", "pot-form-cancel", "flow-add-request", "flow-create", "flow-edit-request", "flow-edit", "flow-archive-request", "flow-archive-bulk", "flow-form-cancel", "realloc-request", "realloc-save", "realloc-cancel", "account-create", "account-edit", "account-toggle"]
     },
     "tables": [
       {

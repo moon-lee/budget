@@ -94,6 +94,7 @@ export class BudgetOrchestrator extends Base {
       this.navigate('budget-pot-form');
     });
     on('pot-archive-request', (d: any) => void this.onArchivePot(d?.key));
+    on('pot-archive-bulk', (d: any) => void this.onArchivePotBulk(d?.keys));
     on('pot-create', (d: any) => void this.onSavePot(d, false));
     on('pot-edit', (d: any) => void this.onSavePot(d, true));
     on('pot-form-cancel', () => this.navigate(this.returnTo));
@@ -105,6 +106,7 @@ export class BudgetOrchestrator extends Base {
       this.navigate('budget-flow-form');
     });
     on('flow-archive-request', (d: any) => void this.onArchiveFlow(d?.key));
+    on('flow-archive-bulk', (d: any) => void this.onArchiveFlowBulk(d?.keys));
     on('flow-create', (d: any) => void this.onSaveFlow(d, false));
     on('flow-edit', (d: any) => void this.onSaveFlow(d, true));
     on('flow-form-cancel', () => this.navigate(this.returnTo));
@@ -170,6 +172,21 @@ export class BudgetOrchestrator extends Base {
     }
   }
 
+  /** Bulk archive: per-row close, collect failures, refresh once. Others still complete. */
+  private async onArchivePotBulk(keys: unknown): Promise<void> {
+    if (!this.finance || !Array.isArray(keys) || keys.length === 0) return;
+    const failed: string[] = [];
+    for (const key of keys) {
+      try {
+        await archivePot(this.finance, String(key), BudgetOrchestrator.today());
+      } catch {
+        failed.push(String(key));
+      }
+    }
+    if (failed.length > 0) this.error = `Archive failed for: ${failed.join(', ')}`;
+    await this.refresh();
+  }
+
   private async onSaveFlow(detail: any, isEdit: boolean): Promise<void> {
     if (!this.finance) return;
     try {
@@ -194,6 +211,21 @@ export class BudgetOrchestrator extends Base {
       this.error = String(e?.message || e);
       (this as any).requestUpdate?.();
     }
+  }
+
+  /** Bulk archive: per-row close, collect failures, refresh once. Others still complete. */
+  private async onArchiveFlowBulk(keys: unknown): Promise<void> {
+    if (!this.finance || !Array.isArray(keys) || keys.length === 0) return;
+    const failed: string[] = [];
+    for (const key of keys) {
+      try {
+        await archiveFlow(this.finance, String(key), BudgetOrchestrator.today());
+      } catch {
+        failed.push(String(key));
+      }
+    }
+    if (failed.length > 0) this.error = `Archive failed for: ${failed.join(', ')}`;
+    await this.refresh();
   }
 
   private async onRealloc(detail: any): Promise<void> {

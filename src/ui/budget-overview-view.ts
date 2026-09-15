@@ -48,6 +48,12 @@ export class BudgetOverviewView extends Base {
     .add-menu button{display:block;width:100%;text-align:left;background:transparent;border:0;color:var(--ff-text,#d4d4d4);font-size:var(--ff-font-base);padding:8px 10px;border-radius:6px;cursor:pointer;white-space:nowrap}
     .add-menu button:hover{background:var(--ff-bg-input-hover,#4a4a4a)}
     .add-menu .sub{display:block;font-size:var(--ff-font-sm);color:var(--ff-text-muted,#858585)}
+    .two-col{display:grid;grid-template-columns:1fr 1fr;gap:0 16px;align-items:start}
+    @media (max-width:900px){.two-col{grid-template-columns:1fr}}
+    .sel-bar{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:var(--ff-font-sm);color:var(--ff-text-muted,#858585)}
+    .sel-bar .count{font-weight:700;color:var(--ff-text,#d4d4d4)}
+    .hist-table input[type=checkbox]{accent-color:var(--ff-accent,#007acc);width:14px;height:14px;cursor:pointer}
+    .hist-table tr.selected td{background:var(--ff-bg-input,#3c3c3c)}
   `] as any : [];
 
   finance: any = null;
@@ -63,6 +69,9 @@ export class BudgetOverviewView extends Base {
   showMoves = true;
   moveDay: 'all' | 'friday' | 'sunday' = 'all';
   addOpen = false;
+  selSavings = new Set<string>();
+  selExpenses = new Set<string>();
+  selMoves = new Set<string>();
 
   async setFinance(f: any): Promise<void> {
     this.finance = f;
@@ -122,8 +131,33 @@ export class BudgetOverviewView extends Base {
     return Math.round(rows.reduce((n: number, p: any) => n + Number(p.weekly_amount || 0), 0) * 100) / 100;
   }
 
-  private summaryHtml(title: string, colLabel: string, rows: any[], shown: boolean, toggle: () => void, colGroup: unknown) {
+  private toggleSel(set: Set<string>, key: string): void {
+    if (set.has(key)) set.delete(key);
+    else set.add(key);
+    (this as any).requestUpdate?.();
+  }
+
+  private toggleAll(set: Set<string>, rows: any[], keyOf: (r: any) => string): void {
+    if (rows.every((r) => set.has(keyOf(r)))) set.clear();
+    else rows.forEach((r) => set.add(keyOf(r)));
+    (this as any).requestUpdate?.();
+  }
+
+  /** Selection action bar: Edit (exactly 1) + Archive (n). */
+  private selBarHtml(sel: Set<string>, editEvent: string, archiveEvent: string, bulkEvent: string): unknown {
+    if (sel.size === 0) return '';
+    const keys = [...sel];
+    return html`<div class="sel-bar"><span class="count">${sel.size} selected</span>
+      <button class="btn-link" ?disabled=${sel.size !== 1} title=${sel.size !== 1 ? 'Select one row to edit' : ''} @click=${() => { if (sel.size === 1) this.emit(editEvent, { key: keys[0] }); }}>Edit</button>
+      <button class="btn-link" @click=${() => this.emit(sel.size === 1 ? archiveEvent : bulkEvent, sel.size === 1 ? { key: keys[0] } : { keys })}>Archive${sel.size > 1 ? ` (${sel.size})` : ''}</button>
+      <button class="btn-link" @click=${() => { sel.clear(); (this as any).requestUpdate?.(); }}>Clear</button>
+    </div>`;
+  }
+
+  private summaryHtml(title: string, colLabel: string, rows: any[], shown: boolean, toggle: () => void, sel: Set<string>, editEvent: string, archiveEvent: string, bulkEvent: string) {
     const total = BudgetOverviewView.sumWeekly(rows);
+    const keyOf = (p: any) => p.pot_key;
+    const allOn = rows.length > 0 && rows.every((p) => sel.has(keyOf(p)));
     return html`<div class="section">
       <button class="group-head ${shown ? 'open' : ''}" @click=${toggle} aria-expanded=${shown ? 'true' : 'false'}>
         <span class="chev"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
@@ -131,32 +165,31 @@ export class BudgetOverviewView extends Base {
         <span class="section-badge">${rows.length}</span>
         <span class="sum"><b>${BudgetOverviewView.aud(total)}</b> / week · ${BudgetOverviewView.aud(total * 52)} / year</span>
       </button>
-      ${shown ? html`<div class="table-wrap"><table class="hist-table">
-        <colgroup>${colGroup}</colgroup>
-        <thead><tr><th>${colLabel}</th><th>Account</th><th class="num">Weekly</th><th class="num">Yearly ×52</th><th>Since</th><th></th></tr></thead>
-        <tbody>${rows.map((p) => this.rowHtml(p))}</tbody>
+      ${shown ? html`${this.selBarHtml(sel, editEvent, archiveEvent, bulkEvent)}
+      <div class="table-wrap"><table class="hist-table slim">
+        <colgroup><col style="width:8%"><col style="width:36%"><col style="width:32%"><col style="width:24%"></colgroup>
+        <thead><tr><th><input type="checkbox" ?checked=${allOn} @change=${() => this.toggleAll(sel, rows, keyOf)} aria-label="Select all"></th><th>${colLabel}</th><th>Account</th><th class="num">Weekly</th></tr></thead>
+        <tbody>${rows.map((p) => this.rowHtml(p, sel))}</tbody>
       </table></div>` : ''}
     </div>`;
   }
 
-  private rowHtml(p: any) {
+  private rowHtml(p: any, sel?: Set<string>) {
     const acct = resolveAccountLabel(this.accountLabels, p.account_id);
-    return html`<tr>
+    const checked = sel?.has(p.pot_key) ?? false;
+    return html`<tr class=${checked ? 'selected' : ''}>
+      ${sel ? html`<td><input type="checkbox" ?checked=${checked} @change=${() => this.toggleSel(sel, p.pot_key)} aria-label="Select ${p.label}"></td>` : ''}
       <td>${p.label}</td><td>${acct ?? '—'}</td>
       <td class="num">${BudgetOverviewView.aud(p.weekly_amount)}</td>
-      <td class="num">${BudgetOverviewView.aud(Number(p.weekly_amount || 0) * 52)}</td>
-      <td>${p.effective_from}</td>
-      <td class="actions"><button class="btn-link" @click=${() => this.emit('pot-edit-request', { key: p.pot_key })}>Edit</button><button class="btn-link" @click=${() => this.emit('pot-archive-request', { key: p.pot_key })}>Archive</button></td>
     </tr>`;
   }
 
   private moveRowHtml(f: any) {
-    return html`<tr>
+    const checked = this.selMoves.has(f.flow_key);
+    return html`<tr class=${checked ? 'selected' : ''}>
+      <td><input type="checkbox" ?checked=${checked} @change=${() => this.toggleSel(this.selMoves, f.flow_key)} aria-label="Select ${f.label}"></td>
       <td>${f.label}</td><td>${f.day === 'friday' ? 'Friday' : 'Sunday'}</td><td>${resolveAccountLabel(this.accountLabels, f.account_id) ?? '—'}</td>
       <td class="num">${BudgetOverviewView.aud(f.weekly_amount)}</td>
-      <td class="num">${BudgetOverviewView.aud(Number(f.weekly_amount || 0) * 52)}</td>
-      <td>${f.effective_from}</td>
-      <td class="actions"><button class="btn-link" @click=${() => this.emit('flow-edit-request', { key: f.flow_key })}>Edit</button><button class="btn-link" @click=${() => this.emit('flow-archive-request', { key: f.flow_key })}>Archive</button></td>
     </tr>`;
   }
 
@@ -180,9 +213,10 @@ export class BudgetOverviewView extends Base {
         <button class="chip ${this.moveDay === 'friday' ? 'on' : ''}" @click=${() => setDay('friday')}>Friday</button>
         <button class="chip ${this.moveDay === 'sunday' ? 'on' : ''}" @click=${() => setDay('sunday')}>Sunday</button>
       </div>
+      ${this.selBarHtml(this.selMoves, 'flow-edit-request', 'flow-archive-request', 'flow-archive-bulk')}
       <div class="table-wrap"><table class="hist-table">
-        <colgroup><col style="width:18%"><col style="width:10%"><col style="width:20%"><col style="width:11%"><col style="width:11%"><col style="width:10%"><col style="width:20%"></colgroup>
-        <thead><tr><th>Move</th><th>Day</th><th>Account</th><th class="num">Weekly</th><th class="num">Yearly ×52</th><th>Since</th><th></th></tr></thead>
+        <colgroup><col style="width:6%"><col style="width:22%"><col style="width:12%"><col style="width:38%"><col style="width:22%"></colgroup>
+        <thead><tr><th><input type="checkbox" ?checked=${rows.length > 0 && rows.every((f: any) => this.selMoves.has(f.flow_key))} @change=${() => this.toggleAll(this.selMoves, rows, (f: any) => f.flow_key)} aria-label="Select all"></th><th>Move</th><th>Day</th><th>Account</th><th class="num">Weekly</th></tr></thead>
         <tbody>${rows.map((f) => this.moveRowHtml(f))}</tbody>
       </table></div>` : ''}
     </div>`;
@@ -219,8 +253,10 @@ export class BudgetOverviewView extends Base {
               <div class="s">${balanced ? 'Balanced' : 'Over budget'}</div></div>
           </div>
         </div>
-        ${this.summaryHtml('Savings pots', 'Pot', savings, this.showSavings, () => { this.showSavings = !this.showSavings; (this as any).requestUpdate?.(); }, html`<col style="width:20%"><col style="width:20%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:24%">`)}
-        ${this.summaryHtml('Expense lines', 'Line', expenses, this.showExpenses, () => { this.showExpenses = !this.showExpenses; (this as any).requestUpdate?.(); }, html`<col style="width:20%"><col style="width:20%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:24%">`)}
+        <div class="two-col">
+        ${this.summaryHtml('Savings pots', 'Pot', savings, this.showSavings, () => { this.showSavings = !this.showSavings; (this as any).requestUpdate?.(); }, this.selSavings, 'pot-edit-request', 'pot-archive-request', 'pot-archive-bulk')}
+        ${this.summaryHtml('Expense lines', 'Line', expenses, this.showExpenses, () => { this.showExpenses = !this.showExpenses; (this as any).requestUpdate?.(); }, this.selExpenses, 'pot-edit-request', 'pot-archive-request', 'pot-archive-bulk')}
+        </div>
         ${this.movesHtml()}
         ${this.trace.length ? html`<div class="section"><div class="section-header"><h3 class="section-title">Plan trace</h3><span class="section-badge">${this.trace.length}</span></div>
           <div class="table-wrap"><table class="hist-table">
