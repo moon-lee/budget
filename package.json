@@ -1,15 +1,15 @@
 {
   "name": "budget",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "main": "src/main.ts",
   "financeExtension": {
     "id": "budget",
     "displayName": "Budget",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "Plan diary with re-allocation history (CashFlow sheet parity)",
-    "themeColor": "#22C55E",
+    "themeColor": "#EA580C",
     "activationEvents": ["onStartup", "onView:budget"],
     "contributions": {
       "views": [{ "id": "budget", "name": "Budget", "icon": "assets/icon.svg" }],
@@ -24,7 +24,7 @@
         { "id": "budget-accounts", "label": "Accounts", "command": "budget.show-accounts", "group": "Budget" }
       ],
       "configuration": [
-        { "key": "budget.themeColor", "type": "string", "label": "Accent color (hex).", "default": "#22C55E", "pattern": "^#[0-9A-Fa-f]{6}$", "formatHint": "#RRGGBB", "placeholder": "#22C55E" }
+        { "key": "budget.themeColor", "type": "string", "label": "Accent color (hex).", "default": "#EA580C", "pattern": "^#[0-9A-Fa-f]{6}$", "formatHint": "#RRGGBB", "placeholder": "#EA580C" }
       ],
       "allowedCommands": ["budget.show-overview", "budget.show-flows", "budget.show-accounts"],
       "allowedUiEvents": ["pot-add-request", "pot-create", "pot-edit-request", "pot-edit", "pot-archive-request", "pot-form-cancel", "flow-add-request", "flow-create", "flow-edit-request", "flow-edit", "flow-archive-request", "flow-form-cancel", "realloc-request", "realloc-save", "realloc-cancel", "account-create", "account-edit", "account-toggle"]
