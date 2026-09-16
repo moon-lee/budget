@@ -397,8 +397,7 @@ export class BudgetOverviewView extends Base {
         <div class="section" style="order:${this.sectionIndex('income')}"><div class="section-header"><h3 class="section-title">Income & balance</h3>
           ${this.incomeManual ? html`<span class="tag">Edited by hand</span>` : html`<span class="tag">Live from Salary</span>`}</div>
           <div class="cards">
-            <div class="card"><div class="k">In / week</div><div class="v">${BudgetOverviewView.aud(b.income_weekly)}</div>
-              <div class="s">Yearly ≈ ${BudgetOverviewView.aud(Number(b.income_weekly) * 52)}</div>
+            <div class="card"><div class="k">In / week</div><div class="v">${BudgetOverviewView.aud(b.income_weekly)} <span class="s">Yearly ≈ ${BudgetOverviewView.aud(Number(b.income_weekly) * 52)}</span></div>
               ${this.latestNetLine() ? html`<div class="s">${this.latestNetLine()}</div>` : ''}
               ${this.incomeManual
                 ? this.incomeEditing
