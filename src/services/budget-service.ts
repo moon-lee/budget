@@ -6,12 +6,17 @@
  * - Income live from `pay` service with `budget_income` fallback; null when missing
  * - Never throws across the service boundary — service-facing wrappers catch and return null
  */
-import { listCurrentFlows } from '../dao/flows.js';
+import { listCurrentFlows, saveFlow } from '../dao/flows.js';
+import { accountById, resolveAccountLabel } from '../dao/accounts.js';
 import { getIncome, getLatestIncome } from '../dao/income.js';
 import { archivePot, listCurrentPots, listPotHistory, savePot } from '../dao/pots.js';
 
 function yearly(weekly: number): number {
   return Math.round(weekly * 52 * 100) / 100;
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
 }
 
 /**
@@ -110,6 +115,50 @@ export async function totals(finance: any): Promise<BalanceCheck | null> {
   } catch {
     return null;
   }
+}
+
+export type SyncOutcome =
+  | { synced: true; accountId: number; planned: number; moved: number; flowKey: string }
+  | { synced: false; reason: 'no-account' | 'no-flows' | 'ambiguous' | 'in-sync' | 'empty-plan' };
+
+/**
+ * One-way sync: plan side → move side, per account (spec §5 amendment 2026-09-16).
+ * After a pot save/archive on `accountId`, bring that account's move total in
+ * line with its planned total. Only fires when the account has exactly ONE
+ * current flow — zero flows means nothing to update, 2+ means ambiguous
+ * (caller keeps the mismatch highlight so the user fixes it by hand).
+ * Planned 0 (last pot archived) writes the move to $0, keeping the slot alive.
+ * Throws on validation/DB failure (orchestrator surfaces it); returns a
+ * non-throwing outcome for the expected no-op cases.
+ */
+export async function syncFlowsForAccount(
+  finance: any,
+  accountId: number | null | undefined,
+  start: string
+): Promise<SyncOutcome> {
+  if (accountId == null) return { synced: false, reason: 'no-account' };
+  const id = Number(accountId);
+  const pots = (await listCurrentPots(finance)).filter((p) => Number(p.account_id) === id);
+  const flows = (await listCurrentFlows(finance)).filter((f) => Number(f.account_id) === id);
+  if (flows.length === 0) return { synced: false, reason: 'no-flows' };
+  const planned = round2(pots.reduce((n: number, p: any) => n + Number(p.weekly_amount || 0), 0));
+  if (pots.length === 0 && planned !== 0) return { synced: false, reason: 'empty-plan' };
+  if (flows.length > 1) return { synced: false, reason: 'ambiguous' };
+  const flow = flows[0];
+  const moved = round2(Number(flow.weekly_amount || 0));
+  if (moved === planned) return { synced: false, reason: 'in-sync' };
+  const accounts = await accountById(finance);
+  const label = resolveAccountLabel(accounts, id) ?? `#${id}`;
+  await saveFlow(
+    finance,
+    flow.flow_key,
+    {
+      weekly_amount: planned,
+      notes: `auto-sync ${start} ${label} plan $${planned}/wk`,
+    },
+    start
+  );
+  return { synced: true, accountId: id, planned, moved, flowKey: flow.flow_key };
 }
 
 export { archivePot, listCurrentFlows, listCurrentPots, listPotHistory, savePot };

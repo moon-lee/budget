@@ -4,6 +4,7 @@ import { createAccount, updateAccount, setAccountActive } from '../dao/accounts.
 import { archiveFlow, saveFlow } from '../dao/flows.js';
 import { saveIncome } from '../dao/income.js';
 import { archivePot, savePot } from '../dao/pots.js';
+import { syncFlowsForAccount } from '../services/budget-service.js';
 import { CANONICAL_SECTION_ORDER, normalizeSectionOrder, type OverviewSectionId } from './overview-sections.js';
 import { ExtensionLogger } from 'finance-logger';
 
@@ -160,7 +161,9 @@ export class BudgetOrchestrator extends Base {
     try {
       const key = String(detail?.key ?? this.formEdit?.key ?? '').trim();
       if (!key) throw new Error('ValidationFailed: pot key is required');
-      await savePot(this.finance, key, (detail?.patch ?? {}) as Record<string, unknown>, String(detail?.start || BudgetOrchestrator.today()));
+      const start = String(detail?.start || BudgetOrchestrator.today());
+      await savePot(this.finance, key, (detail?.patch ?? {}) as Record<string, unknown>, start);
+      await this.syncMovesForPot(key, start);
       this.formEdit = null;
       this.navigate(this.returnTo);
     } catch (e: any) {
@@ -170,10 +173,36 @@ export class BudgetOrchestrator extends Base {
     }
   }
 
+  /**
+   * One-way sync hook: after a pot save/archive, bring that pot's account
+   * move total in line (1:1 accounts only; ambiguous/no-flow stay manual).
+   * The pot write always commits first — sync failures never roll it back.
+   */
+  private async syncMovesForPot(potKey: string, start: string): Promise<void> {
+    try {
+      const rows = (await this.finance.db.table('budget_pots').find({ pot_key: potKey })) as any[];
+      const accountId = rows.length > 0 ? (rows[0] as any).account_id : null;
+      const outcome = await syncFlowsForAccount(this.finance, accountId, start);
+      if (outcome.synced) {
+        log.info('auto-sync move', {
+          accountId: outcome.accountId,
+          flowKey: outcome.flowKey,
+          from: outcome.moved,
+          to: outcome.planned,
+        });
+      }
+    } catch (e: any) {
+      // Sync is best-effort: the pot write already committed. Surface the
+      // mismatch highlight instead of failing the save.
+      log.error('auto-sync move failed', { potKey, error: String(e?.message || e) });
+    }
+  }
+
   private async onArchivePot(key: string): Promise<void> {
     if (!this.finance || !key) return;
     try {
       await archivePot(this.finance, key, BudgetOrchestrator.today());
+      await this.syncMovesForPot(key, BudgetOrchestrator.today());
       await this.refresh();
     } catch (e: any) {
       this.error = String(e?.message || e);
@@ -181,13 +210,20 @@ export class BudgetOrchestrator extends Base {
     }
   }
 
-  /** Bulk archive: per-row close, collect failures, refresh once. Others still complete. */
+  /** Bulk archive: per-row close, sync each touched account once, refresh once. */
   private async onArchivePotBulk(keys: unknown): Promise<void> {
     if (!this.finance || !Array.isArray(keys) || keys.length === 0) return;
     const failed: string[] = [];
+    const syncedAccounts = new Set<number>();
     for (const key of keys) {
       try {
         await archivePot(this.finance, String(key), BudgetOrchestrator.today());
+        const rows = (await this.finance.db.table('budget_pots').find({ pot_key: String(key) })) as any[];
+        const accountId = rows.length > 0 ? Number((rows[0] as any).account_id) : NaN;
+        if (Number.isInteger(accountId) && !syncedAccounts.has(accountId)) {
+          syncedAccounts.add(accountId);
+          await this.syncMovesForPot(String(key), BudgetOrchestrator.today());
+        }
       } catch {
         failed.push(String(key));
       }
