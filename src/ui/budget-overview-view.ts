@@ -42,6 +42,7 @@ export class BudgetOverviewView extends Base {
     .group-head .t{font-weight:700}
     .group-head .sum{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--ff-text-muted,#858585);font-size:var(--ff-font-sm)}
     .group-head .sum b{color:var(--ff-text,#d4d4d4)}
+    .group-head .sum b.warn{color:var(--ff-warning-text,#ffd866)}
     .day-pick{display:flex;align-items:center;gap:8px;margin:0 0 8px}
     .chip{border:1px solid var(--ff-border,#3e3e3e);background:transparent;color:var(--ff-text-muted,#858585);border-radius:12px;padding:3px 12px;font-size:var(--ff-font-sm);cursor:pointer}
     .chip.on{background:var(--ff-bg-input,#3c3c3c);color:var(--ff-text,#d4d4d4);border-color:var(--ff-accent,#007acc)}
@@ -248,6 +249,9 @@ export class BudgetOverviewView extends Base {
     const friday = BudgetOverviewView.sumWeekly(this.flowsForDay('friday'));
     const sunday = BudgetOverviewView.sumWeekly(this.flowsForDay('sunday'));
     const combined = Math.round((friday + sunday) * 100) / 100;
+    const planned = BudgetOverviewView.sumWeekly(this.pots);
+    const gap = Math.round((planned - combined) * 100) / 100;
+    const off = gap !== 0;
     const rows = this.visibleMoves();
     const shown = this.showMoves;
     const toggle = () => { this.showMoves = !this.showMoves; (this as any).requestUpdate?.(); };
@@ -257,7 +261,7 @@ export class BudgetOverviewView extends Base {
         <span class="chev"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
         <span class="t">Pay-day moves</span>
         <span class="section-badge">${rows.length}</span>
-        <span class="sum">Fri <b>${BudgetOverviewView.aud(friday)}</b> · Sun <b>${BudgetOverviewView.aud(sunday)}</b> · Total <b>${BudgetOverviewView.aud(combined)}</b> / week</span>
+        <span class="sum">Fri <b class=${off ? 'warn' : ''}>${BudgetOverviewView.aud(friday)}</b> · Sun <b class=${off ? 'warn' : ''}>${BudgetOverviewView.aud(sunday)}</b> · Total <b class=${off ? 'warn' : ''}>${BudgetOverviewView.aud(combined)}</b> / week</span>
       </button>
       ${shown ? html`<div class="day-pick" @click=${(e: Event) => e.stopPropagation()}>
         <button class="chip ${this.moveDay === 'all' ? 'on' : ''}" @click=${() => setDay('all')}>All</button>
