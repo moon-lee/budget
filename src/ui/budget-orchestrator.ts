@@ -175,18 +175,20 @@ export class BudgetOrchestrator extends Base {
 
   /**
    * One-way sync hook: after a pot save/archive, bring that pot's account
-   * move total in line (1:1 accounts only; ambiguous/no-flow stay manual).
-   * The pot write always commits first — sync failures never roll it back.
+   * move total in line (1:1 accounts, or label-matched flow on shared hubs;
+   * ambiguous/no-flow stay manual). The pot write always commits first —
+   * sync failures never roll it back.
    */
   private async syncMovesForPot(potKey: string, start: string): Promise<void> {
     try {
       const rows = (await this.finance.db.table('budget_pots').find({ pot_key: potKey })) as any[];
       const accountId = rows.length > 0 ? (rows[0] as any).account_id : null;
-      const outcome = await syncFlowsForAccount(this.finance, accountId, start);
+      const outcome = await syncFlowsForAccount(this.finance, accountId, start, potKey);
       if (outcome.synced) {
         log.info('auto-sync move', {
           accountId: outcome.accountId,
           flowKey: outcome.flowKey,
+          mode: outcome.mode,
           from: outcome.moved,
           to: outcome.planned,
         });

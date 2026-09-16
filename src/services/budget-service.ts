@@ -118,15 +118,20 @@ export async function totals(finance: any): Promise<BalanceCheck | null> {
 }
 
 export type SyncOutcome =
-  | { synced: true; accountId: number; planned: number; moved: number; flowKey: string }
+  | { synced: true; accountId: number; planned: number; moved: number; flowKey: string; mode: 'account' | 'label' }
   | { synced: false; reason: 'no-account' | 'no-flows' | 'ambiguous' | 'in-sync' | 'empty-plan' };
 
 /**
  * One-way sync: plan side → move side, per account (spec §5 amendment 2026-09-16).
  * After a pot save/archive on `accountId`, bring that account's move total in
- * line with its planned total. Only fires when the account has exactly ONE
- * current flow — zero flows means nothing to update, 2+ means ambiguous
- * (caller keeps the mismatch highlight so the user fixes it by hand).
+ * line with its planned total. Two tiers:
+ * - Account tier: exactly ONE current flow on the account → set it to the
+ *   account planned total. Zero flows means nothing to update; 2+ falls
+ *   through to the label tier.
+ * - Label tier: the edited pot's label matches exactly ONE flow on the same
+ *   account (case-insensitive) → set that flow to the pot's own amount.
+ *   Anything else stays `ambiguous` (caller keeps the mismatch highlight so
+ *   the user fixes it by hand).
  * Planned 0 (last pot archived) writes the move to $0, keeping the slot alive.
  * Throws on validation/DB failure (orchestrator surfaces it); returns a
  * non-throwing outcome for the expected no-op cases.
@@ -134,7 +139,8 @@ export type SyncOutcome =
 export async function syncFlowsForAccount(
   finance: any,
   accountId: number | null | undefined,
-  start: string
+  start: string,
+  potKey?: string
 ): Promise<SyncOutcome> {
   if (accountId == null) return { synced: false, reason: 'no-account' };
   const id = Number(accountId);
@@ -143,22 +149,44 @@ export async function syncFlowsForAccount(
   if (flows.length === 0) return { synced: false, reason: 'no-flows' };
   const planned = round2(pots.reduce((n: number, p: any) => n + Number(p.weekly_amount || 0), 0));
   if (pots.length === 0 && planned !== 0) return { synced: false, reason: 'empty-plan' };
-  if (flows.length > 1) return { synced: false, reason: 'ambiguous' };
-  const flow = flows[0];
-  const moved = round2(Number(flow.weekly_amount || 0));
-  if (moved === planned) return { synced: false, reason: 'in-sync' };
   const accounts = await accountById(finance);
   const label = resolveAccountLabel(accounts, id) ?? `#${id}`;
+  if (flows.length === 1) {
+    const flow = flows[0];
+    const moved = round2(Number(flow.weekly_amount || 0));
+    if (moved === planned) return { synced: false, reason: 'in-sync' };
+    await saveFlow(
+      finance,
+      flow.flow_key,
+      {
+        weekly_amount: planned,
+        notes: `auto-sync ${start} ${label} plan $${planned}/wk`,
+      },
+      start
+    );
+    return { synced: true, accountId: id, planned, moved, flowKey: flow.flow_key, mode: 'account' };
+  }
+  // Label tier: the edited pot's label matches exactly one same-account flow.
+  const pot = potKey ? pots.find((p) => p.pot_key === potKey) ?? null : null;
+  const potLabel = pot ? String(pot.label || '').trim().toLowerCase() : '';
+  const labelFlows = potLabel
+    ? flows.filter((f) => String(f.label || '').trim().toLowerCase() === potLabel)
+    : [];
+  if (labelFlows.length !== 1) return { synced: false, reason: 'ambiguous' };
+  const flow = labelFlows[0];
+  const want = round2(Number(pot!.weekly_amount || 0));
+  const moved = round2(Number(flow.weekly_amount || 0));
+  if (moved === want) return { synced: false, reason: 'in-sync' };
   await saveFlow(
     finance,
     flow.flow_key,
     {
-      weekly_amount: planned,
-      notes: `auto-sync ${start} ${label} plan $${planned}/wk`,
+      weekly_amount: want,
+      notes: `auto-sync ${start} ${label} ${pot!.label} $${want}/wk`,
     },
     start
   );
-  return { synced: true, accountId: id, planned, moved, flowKey: flow.flow_key };
+  return { synced: true, accountId: id, planned: want, moved, flowKey: flow.flow_key, mode: 'label' };
 }
 
 export { archivePot, listCurrentFlows, listCurrentPots, listPotHistory, savePot };
