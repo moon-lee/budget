@@ -1,86 +1,288 @@
 {
   "name": "budget",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "type": "module",
   "main": "src/main.ts",
   "financeExtension": {
     "id": "budget",
     "displayName": "Budget",
-    "version": "0.1.7",
+    "version": "0.1.8",
     "description": "Plan diary with re-allocation history (CashFlow sheet parity)",
     "themeColor": "#EA580C",
-    "activationEvents": ["onStartup", "onView:budget"],
+    "activationEvents": [
+      "onStartup",
+      "onView:budget"
+    ],
     "contributions": {
-      "views": [{ "id": "budget", "name": "Budget", "icon": "assets/icon.svg", "openCommand": "budget.open-overview" }],
+      "views": [
+        {
+          "id": "budget",
+          "name": "Budget",
+          "icon": "assets/icon.svg",
+          "openCommand": "budget.open-overview"
+        }
+      ],
       "commands": [
-        { "id": "budget.show-overview", "title": "Budget: Overview" },
-        { "id": "budget.open-overview", "title": "Budget: Open Overview" },
-        { "id": "budget.show-accounts", "title": "Budget: Accounts" }
+        {
+          "id": "budget.show-overview",
+          "title": "Budget: Overview"
+        },
+        {
+          "id": "budget.open-overview",
+          "title": "Budget: Open Overview"
+        },
+        {
+          "id": "budget.show-accounts",
+          "title": "Budget: Accounts"
+        }
       ],
       "navigation": [
-        { "id": "budget-overview", "label": "Overview", "command": "budget.show-overview", "group": "Budget" },
-        { "id": "budget-accounts", "label": "Accounts", "command": "budget.show-accounts", "group": "Budget" }
+        {
+          "id": "budget-overview",
+          "label": "Overview",
+          "command": "budget.show-overview",
+          "group": "Budget"
+        },
+        {
+          "id": "budget-accounts",
+          "label": "Accounts",
+          "command": "budget.show-accounts",
+          "group": "Budget"
+        }
       ],
       "configuration": [
-        { "key": "budget.themeColor", "type": "string", "label": "Accent color (hex).", "default": "#EA580C", "pattern": "^#[0-9A-Fa-f]{6}$", "formatHint": "#RRGGBB", "placeholder": "#EA580C" }
+        {
+          "key": "budget.themeColor",
+          "type": "string",
+          "label": "Accent color (hex).",
+          "default": "#EA580C",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "formatHint": "#RRGGBB",
+          "placeholder": "#EA580C"
+        }
       ],
-      "allowedCommands": ["budget.show-overview", "budget.open-overview", "budget.show-accounts"],
-      "allowedUiEvents": ["pot-add-request", "pot-create", "pot-edit-request", "pot-edit", "pot-archive-request", "pot-archive-bulk", "pot-form-cancel", "flow-add-request", "flow-create", "flow-edit-request", "flow-edit", "flow-archive-request", "flow-archive-bulk", "flow-form-cancel", "account-create", "account-edit", "account-toggle", "reorder-sections", "section-order-change", "section-order-cancel", "income-save"]
+      "allowedCommands": [
+        "budget.show-overview",
+        "budget.open-overview",
+        "budget.show-accounts"
+      ],
+      "allowedUiEvents": [
+        "pot-add-request",
+        "pot-create",
+        "pot-edit-request",
+        "pot-edit",
+        "pot-archive-request",
+        "pot-archive-bulk",
+        "pot-form-cancel",
+        "flow-add-request",
+        "flow-create",
+        "flow-edit-request",
+        "flow-edit",
+        "flow-archive-request",
+        "flow-archive-bulk",
+        "flow-form-cancel",
+        "account-create",
+        "account-edit",
+        "account-toggle",
+        "reorder-sections",
+        "section-order-change",
+        "section-order-cancel",
+        "income-save"
+      ]
     },
     "tables": [
       {
         "name": "budget_accounts",
         "columns": [
-          { "name": "account_key", "type": "text", "nullable": false, "description": "Stable key: sheet suffix e.g. 5272, or slug when none e.g. nab-offset" },
-          { "name": "bank", "type": "text", "nullable": true, "description": "e.g. NAB SAVING, NAB OFFSET, BOQ; empty when sheet names none" },
-          { "name": "label", "type": "text", "nullable": false },
-          { "name": "sort_order", "type": "integer", "nullable": false, "default": 0, "min": 0 },
-          { "name": "is_active", "type": "boolean", "nullable": false, "default": true }
+          {
+            "name": "account_key",
+            "type": "text",
+            "nullable": false,
+            "description": "Stable key: sheet suffix e.g. 5272, or slug when none e.g. nab-offset"
+          },
+          {
+            "name": "bank",
+            "type": "text",
+            "nullable": true,
+            "description": "e.g. NAB SAVING, NAB OFFSET, BOQ; empty when sheet names none"
+          },
+          {
+            "name": "label",
+            "type": "text",
+            "nullable": false
+          },
+          {
+            "name": "sort_order",
+            "type": "integer",
+            "nullable": false,
+            "default": 0,
+            "min": 0
+          },
+          {
+            "name": "is_active",
+            "type": "boolean",
+            "nullable": false,
+            "default": true
+          }
         ]
       },
       {
         "name": "budget_pots",
         "columns": [
-          { "name": "pot_key", "type": "text", "nullable": false, "description": "Stable key, e.g. emergency, child, solar, power-bill" },
-          { "name": "label", "type": "text", "nullable": false },
-          { "name": "kind", "type": "text", "nullable": false, "enumOptions": ["saving", "expense"] },
-          { "name": "weekly_amount", "type": "real", "nullable": false, "default": 0, "min": 0 },
-          { "name": "account_id", "type": "integer", "nullable": true, "index": true, "references": "budget_accounts.id", "description": "FK to budget_accounts; NULL when the line has no bank (most expense lines)" },
-          { "name": "effective_from", "type": "date", "nullable": false, "index": true },
-          { "name": "effective_to", "type": "date", "nullable": true, "description": "NULL = current plan row" },
-          { "name": "notes", "type": "text", "nullable": true }
+          {
+            "name": "pot_key",
+            "type": "text",
+            "nullable": false,
+            "description": "Stable key, e.g. emergency, child, solar, power-bill"
+          },
+          {
+            "name": "label",
+            "type": "text",
+            "nullable": false
+          },
+          {
+            "name": "kind",
+            "type": "text",
+            "nullable": false,
+            "enumOptions": [
+              "saving",
+              "expense"
+            ]
+          },
+          {
+            "name": "weekly_amount",
+            "type": "real",
+            "nullable": false,
+            "default": 0,
+            "min": 0
+          },
+          {
+            "name": "account_id",
+            "type": "integer",
+            "nullable": true,
+            "index": true,
+            "references": "budget_accounts.id",
+            "description": "FK to budget_accounts; NULL when the line has no bank (most expense lines)"
+          },
+          {
+            "name": "effective_from",
+            "type": "date",
+            "nullable": false,
+            "index": true
+          },
+          {
+            "name": "effective_to",
+            "type": "date",
+            "nullable": true,
+            "description": "NULL = current plan row"
+          },
+          {
+            "name": "notes",
+            "type": "text",
+            "nullable": true
+          }
         ]
       },
       {
         "name": "budget_flows",
         "columns": [
-          { "name": "flow_key", "type": "text", "nullable": false, "description": "Stable key, e.g. friday-mortgage, sunday-emergency" },
-          { "name": "day", "type": "text", "nullable": false, "enumOptions": ["friday", "sunday"] },
-          { "name": "label", "type": "text", "nullable": false },
-          { "name": "weekly_amount", "type": "real", "nullable": false, "default": 0, "min": 0 },
-          { "name": "account_id", "type": "integer", "nullable": true, "index": true, "references": "budget_accounts.id", "description": "FK to budget_accounts; destination account of the pay-day move" },
-          { "name": "effective_from", "type": "date", "nullable": false, "index": true },
-          { "name": "effective_to", "type": "date", "nullable": true, "description": "NULL = current plan row" },
-          { "name": "notes", "type": "text", "nullable": true }
+          {
+            "name": "flow_key",
+            "type": "text",
+            "nullable": false,
+            "description": "Stable key, e.g. friday-mortgage, sunday-emergency"
+          },
+          {
+            "name": "day",
+            "type": "text",
+            "nullable": false,
+            "enumOptions": [
+              "friday",
+              "sunday"
+            ]
+          },
+          {
+            "name": "label",
+            "type": "text",
+            "nullable": false
+          },
+          {
+            "name": "weekly_amount",
+            "type": "real",
+            "nullable": false,
+            "default": 0,
+            "min": 0
+          },
+          {
+            "name": "account_id",
+            "type": "integer",
+            "nullable": true,
+            "index": true,
+            "references": "budget_accounts.id",
+            "description": "FK to budget_accounts; destination account of the pay-day move"
+          },
+          {
+            "name": "effective_from",
+            "type": "date",
+            "nullable": false,
+            "index": true
+          },
+          {
+            "name": "effective_to",
+            "type": "date",
+            "nullable": true,
+            "description": "NULL = current plan row"
+          },
+          {
+            "name": "notes",
+            "type": "text",
+            "nullable": true
+          }
         ]
       },
       {
         "name": "budget_income",
         "columns": [
-          { "name": "finance_year", "type": "text", "nullable": false, "index": true },
-          { "name": "weekly_amount", "type": "real", "nullable": false, "default": 0, "min": 0 },
-          { "name": "source", "type": "text", "nullable": false, "default": "manual", "enumOptions": ["manual"] },
-          { "name": "notes", "type": "text", "nullable": true }
+          {
+            "name": "finance_year",
+            "type": "text",
+            "nullable": false,
+            "index": true
+          },
+          {
+            "name": "weekly_amount",
+            "type": "real",
+            "nullable": false,
+            "default": 0,
+            "min": 0
+          },
+          {
+            "name": "source",
+            "type": "text",
+            "nullable": false,
+            "default": "manual",
+            "enumOptions": [
+              "manual"
+            ]
+          },
+          {
+            "name": "notes",
+            "type": "text",
+            "nullable": true
+          }
         ]
       }
     ],
     "main": "src/main.ts"
   },
-  "scripts": {
-    "dev": "vite",
-    "build": "node D:/finance_flow_ai/scripts/sdk/cli.mjs build ."
-  },
+    "scripts": {
+      "dev": "vite",
+      "build": "node D:/finance_flow_ai/scripts/sdk/cli.mjs build .",
+      "test": "tsc -p tsconfig.test.json && node --test \"tests/*.test.mjs\"",
+      "version:bump": "node scripts/version-bump.mjs",
+      "release": "node scripts/version-bump.mjs && node D:/finance_flow_ai/scripts/sdk/cli.mjs build ."
+    },
   "devDependencies": {
     "vite": "^5.4.0",
     "typescript": "^5.5.0"

@@ -106,14 +106,16 @@ export async function balanceCheck(
   };
 }
 
-/** Consumer surface (§7): per-item FY total, null when missing — never throws. */
+/** Consumer surface (§7): per-item FY total for expense pots only — savings
+ *  pots are allocations, not spend, so they resolve to null like a missing
+ *  key. Never throws. */
 export async function potYearly(
   finance: any,
   key: string
 ): Promise<{ key: string; weekly_amount: number; yearly_amount: number } | null> {
   try {
     const pots = await listCurrentPots(finance);
-    const row = pots.find((p) => p.pot_key === key);
+    const row = pots.find((p) => p.pot_key === key && p.kind === 'expense');
     if (!row) return null;
     const w = Number(row.weekly_amount || 0);
     return { key, weekly_amount: w, yearly_amount: yearly(w) };

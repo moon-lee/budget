@@ -172,7 +172,7 @@ Owner `finance.services.register('budget', ...)` in `activate()` (ADR-0005, cons
 }
 ```
 
-Each item total = current-row `weekly × 52` (e.g. `potYearly({key:'power-bill'})` → yearly estimate). No bulk dump; consumers ask per item. Graceful `null` when missing.
+Each item total = current-row `weekly × 52` (e.g. `potYearly({key:'power-bill'})` → yearly estimate). `potYearly` serves **expense-kind pots only** — savings pots are allocations, not spend, so a saving key resolves to `null` (same as a missing key) and can never inflate a consumer's yearly-expense figure. No bulk dump; consumers ask per item. Graceful `null` when missing.
 
 ## 8. Navigation (manifest + orchestrator)
 
