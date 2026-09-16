@@ -62,7 +62,8 @@ export class BudgetOverviewView extends Base {
     .sel-bar .btn-link.danger{color:var(--ff-danger,#f48771)}
     .hist-table input[type=checkbox]{accent-color:var(--ff-accent,#007acc);width:14px;height:14px;cursor:pointer}
     .hist-table tr.selected td{background:var(--ff-bg-input,#3c3c3c)}
-    .hist-table tr.mismatch td{background:var(--ff-warning-bg,#3a2e0a)}
+    .hist-table tr.mismatch td{background:var(--ff-warning-bg,#3a2e0a);box-shadow:inset 3px 0 0 var(--ff-warning,#cca700)}
+    .hist-table tr.mismatch td.num{color:var(--ff-warning-text,#ffd866);font-weight:700}
   `] as any : [];
 
   finance: any = null;
