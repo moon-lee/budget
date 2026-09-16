@@ -43,6 +43,31 @@ export async function incomeWeekly(finance: any, financeYear?: string): Promise<
   return 0;
 }
 
+export interface LatestNet {
+  net: number;
+  pay_date: string;
+}
+
+/**
+ * Latest payslip net (§6 reference): `pay.getLatestNet()` when the Salary
+ * extension is present, else null. Reference-only — never feeds the budget
+ * figure; the Overview shows it as a sub-line under In/week.
+ */
+export async function latestNetWeekly(finance: any): Promise<LatestNet | null> {
+  try {
+    const latest = (await finance.services?.invoke?.('pay', 'getLatestNet')) as {
+      net?: unknown;
+      pay_date?: unknown;
+    } | null;
+    const net = Number(latest?.net ?? NaN);
+    const date = String(latest?.pay_date ?? '');
+    if (!Number.isFinite(net) || net <= 0 || !date) return null;
+    return { net: Math.round(net * 100) / 100, pay_date: date };
+  } catch {
+    return null;
+  }
+}
+
 export interface BalanceCheck {
   income_weekly: number;
   savings_weekly: number;

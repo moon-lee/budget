@@ -89,6 +89,8 @@ export class BudgetOverviewView extends Base {
   addOpen = false;
   /** Host-computed live income from mountData (openCommand path). */
   liveIncome: number | null = null;
+  /** Host-computed latest payslip net from mountData (reference-only). */
+  latestNet: { net: number; pay_date: string } | null = null;
   incomeEditing = false;
   incomeMenuOpen = false;
   incomeYear = '';
@@ -131,6 +133,18 @@ export class BudgetOverviewView extends Base {
           const avg = Number(stats?.avgNet ?? NaN);
           if (Number.isFinite(avg) && avg > 0) this.incomeManual = false;
         } catch { /* manual fallback */ }
+      }
+      // latest-net reference: Host value wins; else probe `pay` (Host context
+      // only — panel sandbox invoke is a no-op returning null → hidden).
+      if (!this.latestNet || !(Number.isFinite(this.latestNet.net) && this.latestNet.net > 0 && this.latestNet.pay_date)) {
+        this.latestNet = null;
+        try {
+          const latest = (await this.finance.services?.invoke?.('pay', 'getLatestNet')) as any;
+          const net = Number(latest?.net ?? NaN);
+          if (Number.isFinite(net) && net > 0 && typeof latest?.pay_date === 'string' && latest.pay_date) {
+            this.latestNet = { net, pay_date: latest.pay_date };
+          }
+        } catch { /* hidden when unavailable */ }
       }
       this.balance = await balanceCheck(this.finance, undefined, Number.isFinite(hostLive) && hostLive > 0 ? hostLive : undefined);
       // plan trace: closed rows across all keys, newest first (cap 30)
@@ -178,6 +192,19 @@ export class BudgetOverviewView extends Base {
     this.incomeEditing = false;
     this.incomeMenuOpen = false;
     this.emit('income-save', { financeYear: year, weeklyAmount: Number(amount) });
+  }
+
+  private static shortDate(iso: string): string {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? '');
+    if (!m) return iso;
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${Number(m[3])} ${months[Number(m[2]) - 1] ?? ''}`;
+  }
+
+  private latestNetLine(): string {
+    const ln = this.latestNet;
+    if (!ln || !Number.isFinite(ln.net) || ln.net <= 0 || !ln.pay_date) return '';
+    return `Latest $${Math.round(ln.net).toLocaleString('en-AU')} (${BudgetOverviewView.shortDate(ln.pay_date)})`;
   }
 
   private static aud(n: unknown): string {
@@ -371,7 +398,7 @@ export class BudgetOverviewView extends Base {
           ${this.incomeManual ? html`<span class="tag">Edited by hand</span>` : html`<span class="tag">Live from Salary</span>`}</div>
           <div class="cards">
             <div class="card"><div class="k">In / week</div><div class="v">${BudgetOverviewView.aud(b.income_weekly)}</div>
-              <div class="s">Yearly ≈ ${BudgetOverviewView.aud(Number(b.income_weekly) * 52)}</div>
+              <div class="s">Yearly ≈ ${BudgetOverviewView.aud(Number(b.income_weekly) * 52)}${this.latestNetLine() ? ` · ${this.latestNetLine()}` : ''}</div>
               ${this.incomeManual
                 ? this.incomeEditing
                   ? html`<div class="income-edit">

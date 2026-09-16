@@ -78,6 +78,14 @@ export class BudgetOrchestrator extends Base {
           const v = Number((this.mountData as Record<string, unknown>)?.liveIncome ?? NaN);
           c.liveIncome = Number.isFinite(v) && v > 0 ? v : null;
         }
+        // Host-computed latest payslip net rides alongside (reference-only).
+        if ('latestNet' in c) {
+          const ln = (this.mountData as Record<string, unknown>)?.latestNet as { net?: unknown; pay_date?: unknown } | null;
+          const net = Number(ln?.net ?? NaN);
+          c.latestNet = Number.isFinite(net) && net > 0 && typeof ln?.pay_date === 'string' && ln.pay_date
+            ? { net, pay_date: ln.pay_date }
+            : null;
+        }
       } catch { /* child without section order / live income */ }
     }
     if (c && this.finance && typeof c.setFinance === 'function') {

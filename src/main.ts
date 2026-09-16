@@ -2,7 +2,7 @@ import type { FinanceApi } from 'finance';
 import { ExtensionLogger } from 'finance-logger';
 import './styles/ext-tokens.css';
 import { seedBudget } from './services/seed.js';
-import { flowYearly, incomeWeekly, potYearly, totals } from './services/budget-service.js';
+import { flowYearly, incomeWeekly, latestNetWeekly, potYearly, totals } from './services/budget-service.js';
 
 const logger = new ExtensionLogger('budget');
 
@@ -34,13 +34,19 @@ export async function activate(finance: FinanceApi, ctx: { viewId?: string } & R
   finance.commands.registerCommand('budget.open-overview', 'Budget: Open Overview', async () => {
     if (!_finance) return;
     let liveIncome: number | null = null;
+    let latestNet: { net: number; pay_date: string } | null = null;
     try {
       const weekly = await incomeWeekly(_finance as any);
       if (Number.isFinite(weekly) && weekly > 0) liveIncome = weekly;
     } catch (e: any) {
       logger.error('live income resolve failed', { error: String(e?.message || e) });
     }
-    await _finance.ui?.requestMount('budget', { view: 'budget-overview', liveIncome });
+    try {
+      latestNet = await latestNetWeekly(_finance as any);
+    } catch (e: any) {
+      logger.error('latest net resolve failed', { error: String(e?.message || e) });
+    }
+    await _finance.ui?.requestMount('budget', { view: 'budget-overview', liveIncome, latestNet });
   });
 
   finance.services.register('budget', {
