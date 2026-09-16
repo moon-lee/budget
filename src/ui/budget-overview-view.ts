@@ -30,6 +30,13 @@ export class BudgetOverviewView extends Base {
     .card .s{font-size:var(--ff-font-sm);opacity:.7}
     .income-edit{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
     .income-edit input{width:110px;background:var(--ff-bg-input,#3c3c3c);border:1px solid var(--ff-border,#3e3e3e);border-radius:4px;color:var(--ff-text,#d4d4d4);font-size:var(--ff-font-sm);padding:4px 8px}
+    .card{position:relative}
+    .card-menu-btn{position:absolute;top:8px;right:8px;background:transparent;border:0;color:var(--ff-text-muted,#858585);cursor:pointer;font-size:16px;line-height:1;padding:6px 10px;border-radius:4px}
+    .card-menu-btn:hover,.card-menu-btn.open{color:var(--ff-text,#d4d4d4);background:var(--ff-bg-input,#3c3c3c)}
+    .card-menu{position:absolute;top:36px;right:8px;min-width:190px;background:var(--ff-bg-panel,#252526);border:1px solid var(--ff-border,#3e3e3e);border-radius:8px;padding:4px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.45)}
+    .card-menu button{display:block;width:100%;text-align:left;background:transparent;border:0;color:var(--ff-text,#d4d4d4);font-size:var(--ff-font-base);padding:8px 10px;border-radius:6px;cursor:pointer;white-space:nowrap}
+    .card-menu button:hover{background:var(--ff-bg-input-hover,#4a4a4a)}
+    .card-menu .sub{display:block;font-size:var(--ff-font-sm);color:var(--ff-text-muted,#858585)}
     .ok{color:var(--ff-teal,#4ec9b0)}
     .bad{color:var(--ff-danger,#f48771)}
     .warn{color:var(--ff-warning-text,#ffd866)}
@@ -81,6 +88,7 @@ export class BudgetOverviewView extends Base {
   moveDay: 'all' | 'friday' | 'sunday' = 'all';
   addOpen = false;
   incomeEditing = false;
+  incomeMenuOpen = false;
   incomeYear = '';
   sectionOrder: OverviewSectionId[] = [...CANONICAL_SECTION_ORDER];
   selSavings = new Set<string>();
@@ -149,6 +157,7 @@ export class BudgetOverviewView extends Base {
   private startIncomeEdit(): void {
     this.incomeYear = BudgetOverviewView.defaultFinanceYear();
     this.incomeEditing = true;
+    this.incomeMenuOpen = false;
     (this as any).requestUpdate?.();
   }
 
@@ -158,6 +167,7 @@ export class BudgetOverviewView extends Base {
     const year = ((root?.querySelector('#income-year') as HTMLInputElement)?.value ?? '').trim()
       || BudgetOverviewView.defaultFinanceYear();
     this.incomeEditing = false;
+    this.incomeMenuOpen = false;
     this.emit('income-save', { financeYear: year, weeklyAmount: Number(amount) });
   }
 
@@ -359,9 +369,14 @@ export class BudgetOverviewView extends Base {
                       <input id="income-amount" type="text" inputmode="decimal" placeholder="$ / week" .value=${String(b.income_weekly ?? '')}>
                       <input id="income-year" type="text" inputmode="numeric" placeholder="YYYY-YYYY" .value=${this.incomeYear}>
                       <button class="btn-link" @click=${() => this.saveManualIncome()}>Save</button>
-                      <button class="btn-link" @click=${() => { this.incomeEditing = false; (this as any).requestUpdate?.(); }}>Cancel</button>
+                      <button class="btn-link" @click=${() => { this.incomeEditing = false; this.incomeMenuOpen = false; (this as any).requestUpdate?.(); }}>Cancel</button>
                     </div>`
-                  : html`<div class="s"><button class="btn-link" @click=${() => this.startIncomeEdit()}>Set manually</button></div>`
+                  : html`<button class="card-menu-btn ${this.incomeMenuOpen ? 'open' : ''}" title="Income options"
+                      @click=${() => { this.incomeMenuOpen = !this.incomeMenuOpen; (this as any).requestUpdate?.(); }}
+                      @mouseenter=${() => { if (!this.incomeMenuOpen) { this.incomeMenuOpen = true; (this as any).requestUpdate?.(); } }}>⋮</button>
+                    ${this.incomeMenuOpen ? html`<div class="card-menu" @mouseleave=${() => { this.incomeMenuOpen = false; (this as any).requestUpdate?.(); }}>
+                      <button @click=${() => this.startIncomeEdit()}>Set manually<span class="sub">Type a weekly figure</span></button>
+                    </div>` : ''}`
                 : ''}</div>
             <div class="card"><div class="k">Out / week</div><div class="v">${BudgetOverviewView.aud(Number(b.savings_weekly) + Number(b.expenses_weekly))}</div>
               <div class="s">Savings ${BudgetOverviewView.aud(b.savings_weekly)} + Expenses ${BudgetOverviewView.aud(b.expenses_weekly)}</div></div>
