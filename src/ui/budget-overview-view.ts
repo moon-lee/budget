@@ -82,7 +82,6 @@ export class BudgetOverviewView extends Base {
   selExpenses = new Set<string>();
   selMoves = new Set<string>();
   showTrace = false;
-  showMatch = true;
   /** Which selection is mid-confirm: null | 'savings' | 'expenses' | 'moves'. */
   private confirmKey: string | null = null;
   /** Bumped on every selection change so checkbox bindings re-apply. */
@@ -219,26 +218,28 @@ export class BudgetOverviewView extends Base {
       <div class="table-wrap"><table class="hist-table slim" data-selrev=${this.selRev}>
         <colgroup><col style="width:8%"><col style="width:36%"><col style="width:32%"><col style="width:24%"></colgroup>
         <thead><tr><th><input type="checkbox" ?checked=${allOn} .checked=${allOn} @change=${() => this.toggleAll(sel, rows, keyOf)} aria-label="Select all"></th><th>${colLabel}</th><th>Account</th><th class="num">Weekly</th></tr></thead>
-        <tbody>${rows.map((p) => this.rowHtml(p, sel))}</tbody>
+        <tbody>${rows.map((p) => this.rowHtml(p, sel, this.mismatchedAccounts()))}</tbody>
       </table></div>` : ''}
     </div>`;
   }
 
-  private rowHtml(p: any, sel?: Set<string>) {
+  private rowHtml(p: any, sel?: Set<string>, bad?: Set<number>) {
     const acct = resolveAccountLabel(this.accountLabels, p.account_id);
     const checked = sel?.has(p.pot_key) ?? false;
-    return html`<tr class=${checked ? 'selected' : ''}>
+    const classes = [checked ? 'selected' : '', bad?.has(Number(p.account_id)) ? 'mismatch' : ''].filter(Boolean).join(' ');
+    return html`<tr class=${classes}>
       ${sel ? html`<td><input type="checkbox" ?checked=${checked} .checked=${checked} @change=${() => this.toggleSel(sel, p.pot_key)} aria-label="Select ${p.label}"></td>` : ''}
-      <td>${p.label}</td><td>${acct ?? '—'}</td>
+      <td>${p.label}</td><td>${acct ?? '—'}${bad?.has(Number(p.account_id)) ? ' ⚠' : ''}</td>
       <td class="num">${BudgetOverviewView.aud(p.weekly_amount)}</td>
     </tr>`;
   }
 
-  private moveRowHtml(f: any) {
+  private moveRowHtml(f: any, bad?: Set<number>) {
     const checked = this.selMoves.has(f.flow_key);
-    return html`<tr class=${checked ? 'selected' : ''}>
+    const classes = [checked ? 'selected' : '', bad?.has(Number(f.account_id)) ? 'mismatch' : ''].filter(Boolean).join(' ');
+    return html`<tr class=${classes}>
       <td><input type="checkbox" ?checked=${checked} .checked=${checked} @change=${() => this.toggleSel(this.selMoves, f.flow_key)} aria-label="Select ${f.label}"></td>
-      <td>${f.label}</td><td>${f.day === 'friday' ? 'Friday' : 'Sunday'}</td><td>${resolveAccountLabel(this.accountLabels, f.account_id) ?? '—'}</td>
+      <td>${f.label}</td><td>${f.day === 'friday' ? 'Friday' : 'Sunday'}</td><td>${resolveAccountLabel(this.accountLabels, f.account_id) ?? '—'}${bad?.has(Number(f.account_id)) ? ' ⚠' : ''}</td>
       <td class="num">${BudgetOverviewView.aud(f.weekly_amount)}</td>
     </tr>`;
   }
@@ -267,13 +268,13 @@ export class BudgetOverviewView extends Base {
       <div class="table-wrap"><table class="hist-table" data-selrev=${this.selRev}>
         <colgroup><col style="width:6%"><col style="width:22%"><col style="width:12%"><col style="width:38%"><col style="width:22%"></colgroup>
         <thead><tr><th><input type="checkbox" ?checked=${rows.length > 0 && rows.every((f: any) => this.selMoves.has(f.flow_key))} .checked=${rows.length > 0 && rows.every((f: any) => this.selMoves.has(f.flow_key))} @change=${() => this.toggleAll(this.selMoves, rows, (f: any) => f.flow_key)} aria-label="Select all"></th><th>Move</th><th>Day</th><th>Account</th><th class="num">Weekly</th></tr></thead>
-        <tbody>${rows.map((f) => this.moveRowHtml(f))}</tbody>
+        <tbody>${rows.map((f) => this.moveRowHtml(f, this.mismatchedAccounts()))}</tbody>
       </table></div>` : ''}
     </div>`;
   }
 
-  /** Per-account planned (pots) vs moved (flows). Rows with a gap get warn styling. */
-  private accountMatch(): Array<{ id: number | null; label: string; planned: number; moved: number; gap: number }> {
+  /** Account ids whose planned (pots) total differs from moved (flows) total. */
+  private mismatchedAccounts(): Set<number> {
     const planned = new Map<number, number>();
     for (const p of this.pots) {
       if (p.account_id == null) continue;
@@ -284,50 +285,12 @@ export class BudgetOverviewView extends Base {
       if (f.account_id == null) continue;
       moved.set(Number(f.account_id), (moved.get(Number(f.account_id)) ?? 0) + Number(f.weekly_amount || 0));
     }
-    const ids = new Set<number>([...planned.keys(), ...moved.keys()]);
-    const out: Array<{ id: number | null; label: string; planned: number; moved: number; gap: number }> = [];
-    for (const id of ids) {
-      const p = Math.round((planned.get(id) ?? 0) * 100) / 100;
-      const m = Math.round((moved.get(id) ?? 0) * 100) / 100;
-      out.push({
-        id,
-        label: resolveAccountLabel(this.accountLabels, id) ?? `#${id}`,
-        planned: p,
-        moved: m,
-        gap: Math.round((p - m) * 100) / 100,
-      });
+    const bad = new Set<number>();
+    for (const id of new Set<number>([...planned.keys(), ...moved.keys()])) {
+      const gap = Math.round(((planned.get(id) ?? 0) - (moved.get(id) ?? 0)) * 100) / 100;
+      if (gap !== 0) bad.add(id);
     }
-    // Mismatches first, then by planned desc.
-    out.sort((a, b) => (Number(b.gap !== 0) - Number(a.gap !== 0)) || (b.planned - a.planned));
-    // Unassigned rollup (planned with no account — cannot match a move).
-    const unassigned = BudgetOverviewView.sumWeekly(this.pots.filter((p: any) => p.account_id == null));
-    if (unassigned > 0) out.push({ id: null, label: 'No account', planned: unassigned, moved: 0, gap: unassigned });
-    return out;
-  }
-
-  private matchHtml() {
-    const rows = this.accountMatch();
-    const mismatched = rows.filter((r) => r.gap !== 0).length;
-    const shown = this.showMatch;
-    const toggle = () => { this.showMatch = !this.showMatch; (this as any).requestUpdate?.(); };
-    return html`<div class="section">
-      <button class="group-head ${shown ? 'open' : ''}" @click=${toggle} aria-expanded=${shown ? 'true' : 'false'}>
-        <span class="chev"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-        <span class="t">Account match</span>
-        <span class="section-badge">${rows.length}</span>
-        <span class="sum">${mismatched === 0 ? 'All matched' : html`<b class="warn">${mismatched} mismatched</b>`}</span>
-      </button>
-      ${shown ? html`<div class="table-wrap"><table class="hist-table">
-        <colgroup><col style="width:34%"><col style="width:22%"><col style="width:22%"><col style="width:22%"></colgroup>
-        <thead><tr><th>Account</th><th class="num">Planned</th><th class="num">Moved</th><th class="num">Gap</th></tr></thead>
-        <tbody>${rows.map((r) => html`<tr class=${r.gap !== 0 ? 'mismatch' : ''}>
-          <td>${r.label}</td>
-          <td class="num">${BudgetOverviewView.aud(r.planned)}</td>
-          <td class="num">${BudgetOverviewView.aud(r.moved)}</td>
-          <td class="num ${r.gap !== 0 ? 'warn' : 'ok'}">${r.gap === 0 ? '—' : BudgetOverviewView.aud(r.gap)}</td>
-        </tr>`)}</tbody>
-      </table></div>` : ''}
-    </div>`;
+    return bad;
   }
 
   override render(): unknown {
@@ -372,7 +335,6 @@ export class BudgetOverviewView extends Base {
         ${this.summaryHtml('Expense lines', 'Line', expenses, this.showExpenses, () => { this.showExpenses = !this.showExpenses; (this as any).requestUpdate?.(); }, this.selExpenses, 'pot-edit-request', 'pot-archive-request', 'pot-archive-bulk', 'expenses')}
         </div>
         <div style="order:${this.sectionIndex('moves')}">${this.movesHtml()}</div>
-        <div style="order:${this.sectionIndex('match')}">${this.matchHtml()}</div>
         ${this.trace.length ? html`<div class="section" style="order:${this.sectionIndex('trace')}">
           <button class="group-head ${this.showTrace ? 'open' : ''}" @click=${() => { this.showTrace = !this.showTrace; (this as any).requestUpdate?.(); }} aria-expanded=${this.showTrace ? 'true' : 'false'}>
             <span class="chev"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
