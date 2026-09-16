@@ -398,7 +398,7 @@ export class BudgetOverviewView extends Base {
           ${this.incomeManual ? html`<span class="tag">Edited by hand</span>` : html`<span class="tag">Live from Salary</span>`}</div>
           <div class="cards">
             <div class="card"><div class="k">In / week</div><div class="v">${BudgetOverviewView.aud(b.income_weekly)}</div>
-              <div class="s">Yearly ≈ ${BudgetOverviewView.aud(Number(b.income_weekly) * 52)}${this.latestNetLine() ? ` · ${this.latestNetLine()}` : ''}</div>
+              <div class="s">${this.latestNetLine() ? `${this.latestNetLine()} · ` : ''}Yearly ≈ ${BudgetOverviewView.aud(Number(b.income_weekly) * 52)}</div>
               ${this.incomeManual
                 ? this.incomeEditing
                   ? html`<div class="income-edit">
