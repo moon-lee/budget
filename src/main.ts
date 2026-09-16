@@ -2,7 +2,7 @@ import type { FinanceApi } from 'finance';
 import { ExtensionLogger } from 'finance-logger';
 import './styles/ext-tokens.css';
 import { seedBudget } from './services/seed.js';
-import { flowYearly, potYearly, totals } from './services/budget-service.js';
+import { flowYearly, incomeWeekly, potYearly, totals } from './services/budget-service.js';
 
 const logger = new ExtensionLogger('budget');
 
@@ -27,6 +27,21 @@ export async function activate(finance: FinanceApi, ctx: { viewId?: string } & R
 
   finance.commands.registerCommand('budget.show-overview', 'Budget: Overview', openView('budget-overview'));
   finance.commands.registerCommand('budget.show-accounts', 'Budget: Accounts', openView('budget-accounts'));
+
+  // Host-computed income (Dashboard openCommand pattern): the panel's
+  // services.invoke is a sandbox no-op, so live `pay` figures must be
+  // resolved here where real service bindings exist, then ride in mountData.
+  finance.commands.registerCommand('budget.open-overview', 'Budget: Open Overview', async () => {
+    if (!_finance) return;
+    let liveIncome: number | null = null;
+    try {
+      const weekly = await incomeWeekly(_finance as any);
+      if (Number.isFinite(weekly) && weekly > 0) liveIncome = weekly;
+    } catch (e: any) {
+      logger.error('live income resolve failed', { error: String(e?.message || e) });
+    }
+    await _finance.ui?.requestMount('budget', { view: 'budget-overview', liveIncome });
+  });
 
   finance.services.register('budget', {
     potYearly: async (p?: any) => potYearly(finance as any, (p as any)?.key),

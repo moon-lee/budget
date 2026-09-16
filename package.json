@@ -1,20 +1,21 @@
 {
   "name": "budget",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "type": "module",
   "main": "src/main.ts",
   "financeExtension": {
     "id": "budget",
     "displayName": "Budget",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "description": "Plan diary with re-allocation history (CashFlow sheet parity)",
     "themeColor": "#EA580C",
     "activationEvents": ["onStartup", "onView:budget"],
     "contributions": {
-      "views": [{ "id": "budget", "name": "Budget", "icon": "assets/icon.svg" }],
+      "views": [{ "id": "budget", "name": "Budget", "icon": "assets/icon.svg", "openCommand": "budget.open-overview" }],
       "commands": [
         { "id": "budget.show-overview", "title": "Budget: Overview" },
+        { "id": "budget.open-overview", "title": "Budget: Open Overview" },
         { "id": "budget.show-accounts", "title": "Budget: Accounts" }
       ],
       "navigation": [
@@ -24,7 +25,7 @@
       "configuration": [
         { "key": "budget.themeColor", "type": "string", "label": "Accent color (hex).", "default": "#EA580C", "pattern": "^#[0-9A-Fa-f]{6}$", "formatHint": "#RRGGBB", "placeholder": "#EA580C" }
       ],
-      "allowedCommands": ["budget.show-overview", "budget.show-accounts"],
+      "allowedCommands": ["budget.show-overview", "budget.open-overview", "budget.show-accounts"],
       "allowedUiEvents": ["pot-add-request", "pot-create", "pot-edit-request", "pot-edit", "pot-archive-request", "pot-archive-bulk", "pot-form-cancel", "flow-add-request", "flow-create", "flow-edit-request", "flow-edit", "flow-archive-request", "flow-archive-bulk", "flow-form-cancel", "account-create", "account-edit", "account-toggle", "reorder-sections", "section-order-change", "section-order-cancel", "income-save"]
     },
     "tables": [

@@ -73,7 +73,12 @@ export class BudgetOrchestrator extends Base {
     if (c && this.finance) {
       try {
         if ('sectionOrder' in c) c.sectionOrder = [...this.sectionOrder];
-      } catch { /* child without section order */ }
+        // Host-computed live income rides in mountData (openCommand path).
+        if ('liveIncome' in c) {
+          const v = Number((this.mountData as Record<string, unknown>)?.liveIncome ?? NaN);
+          c.liveIncome = Number.isFinite(v) && v > 0 ? v : null;
+        }
+      } catch { /* child without section order / live income */ }
     }
     if (c && this.finance && typeof c.setFinance === 'function') {
       try {

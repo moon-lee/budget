@@ -87,6 +87,8 @@ export class BudgetOverviewView extends Base {
   showMoves = true;
   moveDay: 'all' | 'friday' | 'sunday' = 'all';
   addOpen = false;
+  /** Host-computed live income from mountData (openCommand path). */
+  liveIncome: number | null = null;
   incomeEditing = false;
   incomeMenuOpen = false;
   incomeYear = '';
@@ -116,14 +118,21 @@ export class BudgetOverviewView extends Base {
       this.pruneSel(this.selSavings, this.pots.filter((p: any) => p.kind === 'saving').map((p: any) => p.pot_key));
       this.pruneSel(this.selExpenses, this.pots.filter((p: any) => p.kind === 'expense').map((p: any) => p.pot_key));
       this.pruneSel(this.selMoves, this.flows.map((f: any) => f.flow_key));
-      // income source tag: live `pay` present and positive → Salary, else manual (spec §6)
+      // income source: Host-computed liveIncome (openCommand mount) wins;
+      // else probe `pay` (works in Host context, no-op in panel sandbox),
+      // else manual fallback (spec §6)
       this.incomeManual = true;
-      try {
-        const stats = (await this.finance.services?.invoke?.('pay', 'getPayslipStats')) as any;
-        const avg = Number(stats?.avgNet ?? NaN);
-        if (Number.isFinite(avg) && avg > 0) this.incomeManual = false;
-      } catch { /* manual fallback */ }
-      this.balance = await balanceCheck(this.finance);
+      const hostLive = Number(this.liveIncome ?? NaN);
+      if (Number.isFinite(hostLive) && hostLive > 0) {
+        this.incomeManual = false;
+      } else {
+        try {
+          const stats = (await this.finance.services?.invoke?.('pay', 'getPayslipStats')) as any;
+          const avg = Number(stats?.avgNet ?? NaN);
+          if (Number.isFinite(avg) && avg > 0) this.incomeManual = false;
+        } catch { /* manual fallback */ }
+      }
+      this.balance = await balanceCheck(this.finance, undefined, Number.isFinite(hostLive) && hostLive > 0 ? hostLive : undefined);
       // plan trace: closed rows across all keys, newest first (cap 30)
       const all = (await this.finance.db.table('budget_pots').find({})) as any[];
       this.trace = all

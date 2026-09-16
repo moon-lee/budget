@@ -53,8 +53,13 @@ export interface BalanceCheck {
   moves_gap_weekly: number;
 }
 
-export async function balanceCheck(finance: any, financeYear?: string): Promise<BalanceCheck> {
-  const income = await incomeWeekly(finance, financeYear);
+export async function balanceCheck(
+  finance: any,
+  financeYear?: string,
+  incomeOverride?: number
+): Promise<BalanceCheck> {
+  const override = Number(incomeOverride ?? NaN);
+  const income = Number.isFinite(override) && override > 0 ? override : await incomeWeekly(finance, financeYear);
   const pots = await listCurrentPots(finance);
   const s = pots
     .filter((p) => p.kind === 'saving')
