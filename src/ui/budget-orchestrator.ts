@@ -121,6 +121,7 @@ export class BudgetOrchestrator extends Base {
     on('flow-create', (d: any) => void this.onSaveFlow(d, false));
     on('flow-edit', (d: any) => void this.onSaveFlow(d, true));
     on('flow-form-cancel', () => this.navigate(this.returnTo));
+    on('income-save', (d: any) => void this.saveManualIncome(String(d?.financeYear ?? ''), Number(d?.weeklyAmount)));
     // accounts
     on('account-create', (d: any) => void this.onAccountCreate(d));
     on('account-edit', (d: any) => void this.onAccountEdit(d));
@@ -308,11 +309,17 @@ export class BudgetOrchestrator extends Base {
     }
   }
 
-  /** Income fallback editor hook (Task 3 UI does not surface this yet; exposed for future use). */
+  /** Income fallback editor: writes the manual row, surfaces validation errors. */
   async saveManualIncome(financeYear: string, weeklyAmount: number): Promise<void> {
     if (!this.finance) return;
-    await saveIncome(this.finance, financeYear, weeklyAmount);
-    await this.refresh();
+    try {
+      await saveIncome(this.finance, financeYear, weeklyAmount);
+      await this.refresh();
+    } catch (e: any) {
+      this.error = String(e?.message || e);
+      log.error('manual income save failed', { error: this.error });
+      (this as any).requestUpdate?.();
+    }
   }
 
   private async onSectionOrderChange(order: unknown): Promise<void> {

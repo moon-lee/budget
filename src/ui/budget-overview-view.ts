@@ -28,6 +28,8 @@ export class BudgetOverviewView extends Base {
     .card .k{font-size:var(--ff-font-sm);color:var(--ff-text-muted,#858585);text-transform:uppercase;letter-spacing:.5px}
     .card .v{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
     .card .s{font-size:var(--ff-font-sm);opacity:.7}
+    .income-edit{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+    .income-edit input{width:110px;background:var(--ff-bg-input,#3c3c3c);border:1px solid var(--ff-border,#3e3e3e);border-radius:4px;color:var(--ff-text,#d4d4d4);font-size:var(--ff-font-sm);padding:4px 8px}
     .ok{color:var(--ff-teal,#4ec9b0)}
     .bad{color:var(--ff-danger,#f48771)}
     .warn{color:var(--ff-warning-text,#ffd866)}
@@ -78,6 +80,8 @@ export class BudgetOverviewView extends Base {
   showMoves = true;
   moveDay: 'all' | 'friday' | 'sunday' = 'all';
   addOpen = false;
+  incomeEditing = false;
+  incomeYear = '';
   sectionOrder: OverviewSectionId[] = [...CANONICAL_SECTION_ORDER];
   selSavings = new Set<string>();
   selExpenses = new Set<string>();
@@ -132,6 +136,29 @@ export class BudgetOverviewView extends Base {
 
   private emit(name: string, detail?: unknown): void {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
+  }
+
+  /** Default FY from today's date assuming a July start (matches sheet convention). */
+  private static defaultFinanceYear(todayIso?: string): string {
+    const d = new Date((todayIso ?? new Date().toISOString().slice(0, 10)) + 'T00:00:00Z');
+    const y = d.getUTCFullYear();
+    const m = d.getUTCMonth() + 1;
+    return m >= 7 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+  }
+
+  private startIncomeEdit(): void {
+    this.incomeYear = BudgetOverviewView.defaultFinanceYear();
+    this.incomeEditing = true;
+    (this as any).requestUpdate?.();
+  }
+
+  private saveManualIncome(): void {
+    const root = (this as any).renderRoot as ShadowRoot | undefined;
+    const amount = (root?.querySelector('#income-amount') as HTMLInputElement)?.value ?? '';
+    const year = ((root?.querySelector('#income-year') as HTMLInputElement)?.value ?? '').trim()
+      || BudgetOverviewView.defaultFinanceYear();
+    this.incomeEditing = false;
+    this.emit('income-save', { financeYear: year, weeklyAmount: Number(amount) });
   }
 
   private static aud(n: unknown): string {
@@ -325,7 +352,17 @@ export class BudgetOverviewView extends Base {
           ${this.incomeManual ? html`<span class="tag">Edited by hand</span>` : html`<span class="tag">Live from Salary</span>`}</div>
           <div class="cards">
             <div class="card"><div class="k">In / week</div><div class="v">${BudgetOverviewView.aud(b.income_weekly)}</div>
-              <div class="s">Yearly ≈ ${BudgetOverviewView.aud(Number(b.income_weekly) * 52)}</div></div>
+              <div class="s">Yearly ≈ ${BudgetOverviewView.aud(Number(b.income_weekly) * 52)}</div>
+              ${this.incomeManual
+                ? this.incomeEditing
+                  ? html`<div class="income-edit">
+                      <input id="income-amount" type="text" inputmode="decimal" placeholder="$ / week" .value=${String(b.income_weekly ?? '')}>
+                      <input id="income-year" type="text" inputmode="numeric" placeholder="YYYY-YYYY" .value=${this.incomeYear}>
+                      <button class="btn-link" @click=${() => this.saveManualIncome()}>Save</button>
+                      <button class="btn-link" @click=${() => { this.incomeEditing = false; (this as any).requestUpdate?.(); }}>Cancel</button>
+                    </div>`
+                  : html`<div class="s"><button class="btn-link" @click=${() => this.startIncomeEdit()}>Set manually</button></div>`
+                : ''}</div>
             <div class="card"><div class="k">Out / week</div><div class="v">${BudgetOverviewView.aud(Number(b.savings_weekly) + Number(b.expenses_weekly))}</div>
               <div class="s">Savings ${BudgetOverviewView.aud(b.savings_weekly)} + Expenses ${BudgetOverviewView.aud(b.expenses_weekly)}</div></div>
             <div class="card"><div class="k">Balance</div><div class="v ${balanced ? 'ok' : 'bad'}">${BudgetOverviewView.aud(b.balance_weekly)}</div>
