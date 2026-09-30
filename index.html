@@ -36,6 +36,9 @@
       });
 
       const finance = createMockFinance();
+      // Dev-only console handle: exercise the cross-extension surface directly,
+      // e.g. await __finance.services.invoke('budget', 'totals').
+      window.__finance = finance;
       let current = null;
 
       async function mountView(index) {

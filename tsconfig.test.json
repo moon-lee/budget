@@ -7,7 +7,7 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "lib": ["ES2022"],
-    "paths": {}
+    "paths": { "finance": ["./src/finance.d.ts"], "finance-logger": ["./src/vendor/logger.ts"] }
   },
-  "include": ["src/dao", "src/services"]
+  "include": ["src/dao", "src/services", "src/mock"]
 }

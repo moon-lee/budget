@@ -24,10 +24,20 @@ export function createMockFinance(): import('finance').FinanceApi {
     services: {
       register: (name: string, impl: Record<string, (p?: unknown) => unknown>) => { servicesRegistry.set(name, impl); },
       unregister: (name: string) => { servicesRegistry.delete(name); },
+      // Mirrors the Host's param marshalling (D:/finance_flow_ai/src/extension-host/api/services.ts):
+      // null/undefined -> no args, an array spreads as-is, anything else becomes
+      // Object.values(params). Without this the mock hands the impl the raw object
+      // and hides every positional-spread bug that only shows up once installed.
       invoke: async (name: string, method: string, params?: unknown) => {
         const svc = servicesRegistry.get(name);
         if (!svc || typeof svc[method] !== 'function') return null;
-        return await svc[method](params);
+        const args =
+          params === undefined || params === null
+            ? []
+            : Array.isArray(params)
+              ? params
+              : Object.values(params as object);
+        return await svc[method](...args);
       },
     },
     ui: { requestMount: async () => {}, setDirty: () => {}, autoSaveDraft: async () => {}, onBeforeUnmount: () => {} },

@@ -2,7 +2,8 @@ import type { FinanceApi } from 'finance';
 import { ExtensionLogger } from 'finance-logger';
 import './styles/ext-tokens.css';
 import { seedBudget } from './services/seed.js';
-import { flowYearly, incomeWeekly, latestNetWeekly, potYearly, totals } from './services/budget-service.js';
+import { incomeWeekly, latestNetWeekly } from './services/budget-service.js';
+import { createBudgetDomainService } from './services/budget-domain-service.js';
 
 const logger = new ExtensionLogger('budget');
 
@@ -49,11 +50,7 @@ export async function activate(finance: FinanceApi, ctx: { viewId?: string } & R
     await _finance.ui?.requestMount('budget', { view: 'budget-overview', liveIncome, latestNet });
   });
 
-  finance.services.register('budget', {
-    potYearly: async (p?: any) => potYearly(finance as any, (p as any)?.key),
-    flowYearly: async (p?: any) => flowYearly(finance as any, (p as any)?.key),
-    totals: async () => totals(finance as any),
-  });
+  finance.services.register('budget', createBudgetDomainService(finance));
 
   if (typeof window !== 'undefined') await import('./ui/index.js');
   if (ctx.viewId && typeof document !== 'undefined') {
