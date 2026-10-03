@@ -381,7 +381,7 @@ export class BudgetOverviewView extends Base {
     return html`
       <div class="view-scroll">
       <div class="topbar"><span class="crumb-current">Budget · Overview</span><div class="spacer"></div>
-        <button class="filter-btn" @click=${() => this.emit('reorder-sections')}>⇅ Sections</button>
+        <button class="filter-btn" @click=${() => this.emit('reorder-sections')}>⇅ Reorder Sections</button>
         <div class="add-wrap">
           <button class="filter-btn" @click=${() => { this.addOpen = !this.addOpen; (this as any).requestUpdate?.(); }}>Add ▾</button>
           ${this.addOpen ? html`<div class="add-menu">

@@ -117,6 +117,51 @@
 }
 .topbar .filter-btn:hover { border-color: var(--ff-accent, #007acc); }
 .topbar a.filter-btn { color: var(--ff-text, #d4d4d4); text-decoration: none; }
+.topbar .filter-btn.on {
+  border-color: var(--ff-accent, #007acc);
+  color: var(--ff-text-strong, #fff);
+}
+/* Finance-year selector. Promoted from expenseflow and wealthflow, which each
+   defined their own copy because this file did not carry it. Labelled, because
+   an unlabelled year dropdown is guesswork on a dense top bar. */
+.topbar .fy-label {
+  color: var(--ff-text-muted, #858585);
+  font-size: var(--ff-font-base);
+  white-space: nowrap;
+}
+.topbar .fy-select {
+  background: var(--ff-bg-input, #3c3c3c);
+  color: var(--ff-text, #d4d4d4);
+  border: 1px solid var(--ff-border, #3e3e3e);
+  padding: 5px 8px;
+  border-radius: 3px;
+  font-size: var(--ff-font-base);
+  font-family: inherit;
+  cursor: pointer;
+}
+.topbar .fy-select:hover,
+.topbar .fy-select:focus { border-color: var(--ff-accent, #007acc); }
+/* Reorder. Previously `reorder-btn` in salary-history and dashboard and
+   `filter-btn` everywhere else, with three different labels for one action. */
+.topbar .reorder-btn {
+  background: var(--ff-bg-input, #3c3c3c);
+  color: var(--ff-text, #d4d4d4);
+  border: 1px solid var(--ff-border, #3e3e3e);
+  padding: 5px 12px;
+  border-radius: 3px;
+  font-size: var(--ff-font-base);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.topbar .reorder-btn:hover { border-color: var(--ff-accent, #007acc); }
+/* Unsaved-changes marker, from expenseflow. */
+.topbar .dirty-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ff-warning-text, #cca700);
+  flex-shrink: 0;
+}
 
 h1 {
   font-size: var(--ff-font-xl);

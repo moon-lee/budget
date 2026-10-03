@@ -60,7 +60,7 @@ export class BudgetAccountsView extends Base {
     return html`
       <div class="view-scroll">
       <div class="topbar"><span class="crumb-current">Budget · Accounts</span><div class="spacer"></div>
-        <button class="filter-btn" @click=${() => { this.editing = { mode: 'add' }; (this as any).requestUpdate?.(); }}>Add account</button></div>
+        <button class="filter-btn" @click=${() => { this.editing = { mode: 'add' }; (this as any).requestUpdate?.(); }}>+ Add Account</button></div>
       <div class="view-container"><div class="view-container-inner">
         <h1>Accounts</h1>
         ${this.error ? html`<p class="field-error">Error: ${this.error}</p>` : ''}
