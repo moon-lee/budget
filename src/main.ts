@@ -24,6 +24,33 @@ function openView(tag: string): () => Promise<void> {
 export async function activate(finance: FinanceApi, ctx: { viewId?: string } & Record<string, unknown> = {}): Promise<void> {
   _finance = finance;
   logger.info('activate budget', { viewId: ctx.viewId });
+
+  // Nav-bar Refresh (Quick Links group), same pattern as taxflow. pushData
+  // rather than requestMount: the latter would create the panel if it were
+  // closed, popping a view the user had deliberately shut. Dropped when nothing
+  // is mounted, which is what a Refresh item should do.
+  finance.commands.registerCommand('budget.refresh', 'Refresh Budget', async () => {
+    // Host-resolved live figures: the panel's services.invoke is a sandbox
+    // no-op, so pay data must be resolved here where real bindings exist.
+    let liveIncome: number | null = null;
+    let latestNet: { net: number; pay_date: string } | null = null;
+    try {
+      const weekly = await incomeWeekly(_finance as any);
+      if (Number.isFinite(weekly) && weekly > 0) liveIncome = weekly;
+    } catch (e: any) {
+      logger.error('refresh: live income resolve failed', { error: String(e?.message || e) });
+    }
+    try {
+      latestNet = await latestNetWeekly(_finance as any);
+    } catch (e: any) {
+      logger.error('refresh: latest net resolve failed', { error: String(e?.message || e) });
+    }
+    try {
+      await finance.ui?.pushData?.('budget', { refreshedAt: Date.now(), liveIncome, latestNet, });
+    } catch (err) {
+      logger.error('budget refresh failed', err);
+    }
+  });
   await seedBudget(finance as any);
 
   finance.commands.registerCommand('budget.show-overview', 'Budget: Overview', openView('budget-overview'));

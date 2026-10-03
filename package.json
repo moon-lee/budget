@@ -1,13 +1,13 @@
 {
   "name": "budget",
-    "version": "0.1.9",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "src/main.ts",
   "financeExtension": {
     "id": "budget",
     "displayName": "Budget",
-  "version": "0.1.9",
+    "version": "0.2.0",
     "description": "Plan diary with re-allocation history (CashFlow sheet parity)",
     "themeColor": "#EA580C",
     "activationEvents": [
@@ -35,9 +35,19 @@
         {
           "id": "budget.show-accounts",
           "title": "Budget: Accounts"
+        },
+        {
+          "id": "budget.refresh",
+          "title": "Refresh Budget"
         }
       ],
       "navigation": [
+        {
+          "id": "budget-refresh",
+          "label": "Refresh",
+          "command": "budget.refresh",
+          "group": "Quick Links"
+        },
         {
           "id": "budget-overview",
           "label": "Overview",
@@ -65,7 +75,8 @@
       "allowedCommands": [
         "budget.show-overview",
         "budget.open-overview",
-        "budget.show-accounts"
+        "budget.show-accounts",
+        "budget.refresh"
       ],
       "allowedUiEvents": [
         "pot-add-request",
@@ -276,13 +287,13 @@
     ],
     "main": "src/main.ts"
   },
-    "scripts": {
-      "dev": "vite",
-      "build": "node D:/finance_flow_ai/scripts/sdk/cli.mjs build .",
-      "test": "tsc -p tsconfig.test.json && node --test \"tests/*.test.mjs\"",
-      "version:bump": "node scripts/version-bump.mjs",
-      "release": "node scripts/version-bump.mjs && node D:/finance_flow_ai/scripts/sdk/cli.mjs build ."
-    },
+  "scripts": {
+    "dev": "vite",
+    "build": "node D:/finance_flow_ai/scripts/sdk/cli.mjs build .",
+    "test": "tsc -p tsconfig.test.json && node --test \"tests/*.test.mjs\"",
+    "version:bump": "node scripts/version-bump.mjs",
+    "release": "node scripts/version-bump.mjs && node D:/finance_flow_ai/scripts/sdk/cli.mjs build ."
+  },
   "devDependencies": {
     "vite": "^5.4.0",
     "typescript": "^5.5.0"
