@@ -15,6 +15,65 @@ function yearly(weekly: number): number {
   return Math.round(weekly * 52 * 100) / 100;
 }
 
+/** Exported so the pot form's "per year" hint uses the same month count. */
+export const MONTHS_PER_YEAR = 12;
+/** 365.2425 / 7 — the mean solar year, so a week is 1/52.1775 of it. */
+export const WEEKS_PER_YEAR = 365.2425 / 7;
+
+/**
+ * Monthly → weekly (§8 amendment 2026-10-08, rounding revised twice).
+ *
+ * Most expenses are quoted monthly (power, mobile, insurance, rego) but
+ * every consumer of `weekly_amount` is weekly, so monthly is an entry
+ * convenience that divides once here. Uses the mean-year divisor so the
+ * result is the correct average week rather than one derived from a
+ * nominal 4 weeks/month.
+ *
+ * ## Rounds UP to whole dollars, deliberately
+ *
+ * The weekly figure is the amount actually set aside each week, so it must
+ * never come to less than the monthly bill implies. Ceil to the dollar, not
+ * to the cent and not to nearest: a whole-dollar set-aside is what the user
+ * moves, so fractional dollars are noise in both the plan and the move.
+ *
+ * e.g. $180/month => $42/week; $275.50/month => $64/week.
+ *
+ * ## What this costs
+ *
+ * Over-provisioning is up to $0.99/week, i.e. ~$52/year per expense line —
+ * materially more than a cent-level ceil. On a $180/month bill that is
+ * $6.60/year banked rather than spent. Accepted deliberately: the shortfall
+ * risk from rounding down is worse than the idle cash, and the line can be
+ * set to weekly entry at any time when exactness matters.
+ *
+ * Known limit, not fixable here: `potYearly` multiplies by 52, and a year
+ * is 52.18 weeks, so `potYearly` sits ~0.33% under `12 x monthly` for
+ * every input. That gap predates this conversion; the ceil adds on top of
+ * it, always in the safe direction.
+ *
+ * Reconstructing a monthly amount from the stored weekly figure can differ
+ * by up to ~$0.99, since the cadence is not persisted.
+ */
+export function monthlyToWeekly(monthly: number): number {
+  const m = Number(monthly);
+  if (!Number.isFinite(m)) return 0;
+  // Clamp at 0 first so a negative input cannot produce "-0".
+  const perWeek = Math.max(0, (m * MONTHS_PER_YEAR) / WEEKS_PER_YEAR);
+  return Math.ceil(perWeek);
+}
+
+/**
+ * Annual cost actually provisioned by a weekly set-aside, over the mean
+ * year. Differs from `yearly()` (x 52) by the 0.33% week-count gap, and
+ * from `12 x monthly` by the ceiling — both are real, so the UI shows this
+ * rather than the bill when explaining a rounded-up monthly line.
+ */
+export function weeklyProvisionYearly(weekly: number): number {
+  const w = Number(weekly);
+  if (!Number.isFinite(w)) return 0;
+  return Math.round(Math.max(0, w) * WEEKS_PER_YEAR * 100) / 100;
+}
+
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
