@@ -73,10 +73,13 @@ export class BudgetOverviewView extends Base {
     .hist-table input[type=checkbox]{accent-color:var(--ff-accent,#007acc);width:14px;height:14px;cursor:pointer}
     .hist-table tr.selected td{background:var(--ff-bg-input,#3c3c3c)}
     .hist-table tr.acct td.acct-cell{color:var(--hue,#888)}
+    /* Hover tints the whole row in its account colour. Rows with no account keep
+       no .acct class; mismatched rows are excluded so the gold survives. */
+    .hist-table tr.acct:not(.mismatch):hover td{color:var(--hue,#888)}
     :host-context(body.light-theme) .hist-table tr.acct td.acct-cell{color:var(--hue-light,#64748b)}
-    /* Mismatch wins over the account hue: the whole row goes gold. The acct-cell
-       selector is repeated so it ties .acct td.acct-cell on specificity and
-       wins on source order. */
+    :host-context(body.light-theme) .hist-table tr.acct:not(.mismatch):hover td{color:var(--hue-light,#64748b)}
+    /* Mismatch wins over the account hue, hover or not. acct-cell is repeated so
+       this ties .acct td.acct-cell on specificity and wins on source order. */
     .hist-table tr.mismatch td,
     .hist-table tr.mismatch td.acct-cell{color:var(--ff-warning-text,#ffd866)}
   `] as any : [];
