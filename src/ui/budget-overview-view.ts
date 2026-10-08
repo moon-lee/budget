@@ -107,6 +107,8 @@ export class BudgetOverviewView extends Base {
   private confirmKey: string | null = null;
   /** Bumped on every selection change so checkbox bindings re-apply. */
   private selRev = 0;
+  /** Mismatched account ids for the current render. Recomputed in render(). */
+  private bad: Set<number> = new Set();
 
   async setFinance(f: any): Promise<void> {
     this.finance = f;
@@ -296,7 +298,7 @@ export class BudgetOverviewView extends Base {
       <div class="table-wrap"><table class="hist-table slim" data-selrev=${this.selRev}>
         <colgroup><col style="width:8%"><col style="width:36%"><col style="width:32%"><col style="width:24%"></colgroup>
         <thead><tr><th><input type="checkbox" ?checked=${allOn} .checked=${allOn} @change=${() => this.toggleAll(sel, rows, keyOf)} aria-label="Select all"></th><th>${colLabel}</th><th>Account</th><th class="num">Weekly</th></tr></thead>
-        <tbody>${rows.map((p) => this.rowHtml(p, sel, this.mismatchedAccounts()))}</tbody>
+        <tbody>${rows.map((p) => this.rowHtml(p, sel, this.bad))}</tbody>
       </table></div>` : ''}
     </div>`;
   }
@@ -332,7 +334,7 @@ export class BudgetOverviewView extends Base {
     // in opposite directions cancel out and would leave the header clean while
     // ⚠ markers show. The Moves card keeps its own signed gap (below) because it
     // needs the direction.
-    const off = this.mismatchedAccounts().size > 0;
+    const off = this.bad.size > 0;
     const rows = this.visibleMoves();
     const shown = this.showMoves;
     const toggle = () => { this.showMoves = !this.showMoves; (this as any).requestUpdate?.(); };
@@ -353,7 +355,7 @@ export class BudgetOverviewView extends Base {
       <div class="table-wrap"><table class="hist-table" data-selrev=${this.selRev}>
         <colgroup><col style="width:6%"><col style="width:22%"><col style="width:12%"><col style="width:38%"><col style="width:22%"></colgroup>
         <thead><tr><th><input type="checkbox" ?checked=${rows.length > 0 && rows.every((f: any) => this.selMoves.has(f.flow_key))} .checked=${rows.length > 0 && rows.every((f: any) => this.selMoves.has(f.flow_key))} @change=${() => this.toggleAll(this.selMoves, rows, (f: any) => f.flow_key)} aria-label="Select all"></th><th>Move</th><th>Day</th><th>Account</th><th class="num">Weekly</th></tr></thead>
-        <tbody>${rows.map((f) => this.moveRowHtml(f, this.mismatchedAccounts()))}</tbody>
+        <tbody>${rows.map((f) => this.moveRowHtml(f, this.bad))}</tbody>
       </table></div>` : ''}
     </div>`;
   }
@@ -380,6 +382,8 @@ export class BudgetOverviewView extends Base {
 
   override render(): unknown {
     if (typeof HTMLElement === 'undefined') return html``;
+    // Once per render: the pot/line tables and the moves table all read this.
+    this.bad = this.mismatchedAccounts();
     const b = this.balance ?? { income_weekly: 0, savings_weekly: 0, expenses_weekly: 0, balance_weekly: 0, moves_weekly: 0, moves_gap_weekly: 0 };
     const balanced = Number(b.balance_weekly) >= 0;
     const gap = Math.round(Number(b.moves_gap_weekly || 0) * 100) / 100;
