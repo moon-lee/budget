@@ -230,10 +230,11 @@ describe('hueIndexForAccount', () => {
 
   it('cycles back to the first hue past the palette size', () => {
     const size = ACCOUNT_HUES.length;
-    const ids = Array.from({ length: size + 1 }, (_, i) => i + 1);
+    const ids = Array.from({ length: size + 2 }, (_, i) => i + 1);
     const accounts = mapOf(ids);
-    assert.equal(hueIndexForAccount(accounts, size), 0);
-    assert.equal(hueIndexForAccount(accounts, size + 1), 1);
+    // ids[i] sits at rank i, so rank `size` wraps to hue 0 and `size + 1` to hue 1.
+    assert.equal(hueIndexForAccount(accounts, ids[size]), 0);
+    assert.equal(hueIndexForAccount(accounts, ids[size + 1]), 1);
   });
 
   it('matches a string id against numeric keys', () => {
