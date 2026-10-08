@@ -21,6 +21,55 @@ describe('account palettes', () => {
       assert.match(hex, /^#[0-9a-f]{6}$/i, `bad hue ${hex}`);
     }
   });
+
+  it('keeps every hue clear of the mismatch gold', () => {
+    // A mismatched row paints its whole text gold, so an account hue within
+    // ~35deg of the gold would read as "this account is off" when it is not.
+    // Grey (no hue) and low-saturation tints are safe — they cannot pass for gold.
+    const hueAngle = (hex) => {
+      const [r, g, b] = [1, 3, 5].map(
+        (i) => parseInt(hex.slice(i, i + 2), 16) / 255,
+      );
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const d = max - min;
+      if (d === 0) return null; // achromatic
+      let h;
+      if (max === r) h = ((g - b) / d) % 6;
+      else if (max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      return (h * 60 + 360) % 360;
+    };
+    const saturation = (hex) => {
+      const [r, g, b] = [1, 3, 5].map(
+        (i) => parseInt(hex.slice(i, i + 2), 16) / 255,
+      );
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      return max === 0 ? 0 : (max - min) / max;
+    };
+    const angleGap = (a, b) => {
+      const d = Math.abs(a - b) % 360;
+      return d > 180 ? 360 - d : d;
+    };
+
+    const check = (hues, mismatch, label) => {
+      const gold = hueAngle(mismatch);
+      for (const hex of hues) {
+        const a = hueAngle(hex);
+        if (a === null) continue; // achromatic grey
+        if (saturation(hex) <= 0.25) continue; // too washed out to read as gold
+        const gap = angleGap(a, gold);
+        assert.ok(
+          gap >= 35,
+          `${label} hue ${hex} is ${gap}deg from mismatch ${mismatch}`,
+        );
+      }
+    };
+
+    check(ACCOUNT_HUES, '#ffd866', 'dark');
+    check(ACCOUNT_HUES_LIGHT, '#92400e', 'light');
+  });
 });
 
 describe('hueIndexForAccount', () => {

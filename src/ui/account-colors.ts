@@ -16,20 +16,27 @@
  * (AGENTS.md §1, §10).
  */
 
-/** 12 hues for dark theme surfaces. Index = account rank. */
+/**
+ * 12 hues for dark theme surfaces. Index = account rank.
+ *
+ * Deliberately excludes anything close to the mismatch gold
+ * (`--ff-warning-text` #ffd866): a mismatched row paints its whole text gold
+ * (see `.mismatch` in budget-overview-view.ts), so a gold-ish account hue would
+ * make "this account is coloured" and "this account is off" look identical.
+ */
 export const ACCOUNT_HUES: readonly string[] = [
   '#4ec9b0', // teal
   '#569cd6', // blue
   '#c586c0', // pink
-  '#dcdcaa', // sand
-  '#6a9955', // green
-  '#e5c07b', // amber
   '#9cdcfe', // sky
+  '#6a9955', // green
   '#c8c8c8', // silver
   '#b5cea8', // mint
   '#f28b82', // salmon
-  '#d18f52', // clay
   '#7fdbca', // aqua
+  '#4a7fb5', // steel
+  '#ba9ee8', // lavender
+  '#5fb3b3', // seafoam
 ];
 
 /** Darker variants of the same 12 hues, for `body.light-theme`. */
@@ -37,15 +44,15 @@ export const ACCOUNT_HUES_LIGHT: readonly string[] = [
   '#0f766e', // teal
   '#1d4ed8', // blue
   '#a21caf', // pink
-  '#854d0e', // sand
-  '#3f6212', // green
-  '#b45309', // amber
   '#0369a1', // sky
+  '#3f6212', // green
   '#64748b', // silver
   '#4d7c0f', // mint
   '#be123c', // salmon
-  '#c2410c', // clay
   '#0f766e', // aqua
+  '#1e40af', // steel
+  '#6b21a8', // lavender
+  '#115e59', // seafoam
 ];
 
 export interface HuePair {
@@ -60,7 +67,7 @@ export interface HuePair {
  *
  * Index is the account's position in the (already sort_order-sorted) map's
  * values. Cycles past the palette size, so two accounts may share a hue — the
- * bar is a pairing aid, not a uniqueness guarantee.
+ * Account cell colour is a pairing aid, not a uniqueness guarantee.
  */
 export function hueIndexForAccount(
   accounts: Map<number, { sort_order: number }>,

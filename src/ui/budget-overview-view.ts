@@ -72,10 +72,13 @@ export class BudgetOverviewView extends Base {
     .sel-bar .btn-link.danger{color:var(--ff-danger,#f48771)}
     .hist-table input[type=checkbox]{accent-color:var(--ff-accent,#007acc);width:14px;height:14px;cursor:pointer}
     .hist-table tr.selected td{background:var(--ff-bg-input,#3c3c3c)}
-    .hist-table tr.acct td:first-child{box-shadow:inset 3px 0 0 var(--hue,#888)}
     .hist-table tr.acct td.acct-cell{color:var(--hue,#888)}
-    :host-context(body.light-theme) .hist-table tr.acct td:first-child{box-shadow:inset 3px 0 0 var(--hue-light,#64748b)}
     :host-context(body.light-theme) .hist-table tr.acct td.acct-cell{color:var(--hue-light,#64748b)}
+    /* Mismatch wins over the account hue: the whole row goes gold. The acct-cell
+       selector is repeated so it ties .acct td.acct-cell on specificity and
+       wins on source order. */
+    .hist-table tr.mismatch td,
+    .hist-table tr.mismatch td.acct-cell{color:var(--ff-warning-text,#ffd866)}
   `] as any : [];
 
   finance: any = null;
@@ -307,7 +310,8 @@ export class BudgetOverviewView extends Base {
     const hp = huePairForAccount(this.accountLabels, p.account_id);
     const acct = resolveAccountLabel(this.accountLabels, p.account_id);
     const checked = sel?.has(p.pot_key) ?? false;
-    const classes = [checked ? 'selected' : '', hp ? 'acct' : ''].filter(Boolean).join(' ');
+    const mism = !!bad?.has(Number(p.account_id));
+    const classes = [checked ? 'selected' : '', hp ? 'acct' : '', mism ? 'mismatch' : ''].filter(Boolean).join(' ');
     return html`<tr class=${classes} style=${hp ? `--hue:${hp.hue};--hue-light:${hp.hueLight}` : ''}>
       ${sel ? html`<td><input type="checkbox" ?checked=${checked} .checked=${checked} @change=${() => this.toggleSel(sel, p.pot_key)} aria-label="Select ${p.label}"></td>` : ''}
       <td>${p.label}</td><td class="acct-cell">${acct ?? '—'}${bad?.has(Number(p.account_id)) ? ' ⚠' : ''}</td>
@@ -318,7 +322,8 @@ export class BudgetOverviewView extends Base {
   private moveRowHtml(f: any, bad?: Set<number>) {
     const hp = huePairForAccount(this.accountLabels, f.account_id);
     const checked = this.selMoves.has(f.flow_key);
-    const classes = [checked ? 'selected' : '', hp ? 'acct' : ''].filter(Boolean).join(' ');
+    const mism = !!bad?.has(Number(f.account_id));
+    const classes = [checked ? 'selected' : '', hp ? 'acct' : '', mism ? 'mismatch' : ''].filter(Boolean).join(' ');
     return html`<tr class=${classes} style=${hp ? `--hue:${hp.hue};--hue-light:${hp.hueLight}` : ''}>
       <td><input type="checkbox" ?checked=${checked} .checked=${checked} @change=${() => this.toggleSel(this.selMoves, f.flow_key)} aria-label="Select ${f.label}"></td>
       <td>${f.label}</td><td>${f.day === 'friday' ? 'Friday' : 'Sunday'}</td><td class="acct-cell">${resolveAccountLabel(this.accountLabels, f.account_id) ?? '—'}${bad?.has(Number(f.account_id)) ? ' ⚠' : ''}</td>
