@@ -1,6 +1,7 @@
-import { LitElement, css, html } from 'lit';
+import { LitElement, css, html, nothing } from 'lit';
 import { sharedStyles } from '../styles/shared-styles.js';
 import { accountById, resolveAccountLabel } from '../dao/accounts.js';
+import { computePairingGroups, type PairingGroup } from './row-pairing.js';
 import { listPotHistory } from '../dao/pots.js';
 import { balanceCheck } from '../services/budget-service.js';
 import { listCurrentPots } from '../dao/pots.js';
@@ -75,9 +76,17 @@ export class BudgetOverviewView extends Base {
        so the whole pairing is visible at once. Driven by the hover-acct class
        rather than :hover, since the cursor is on one row while the highlight
        spans all three tables. Mismatched rows opt out so their gold survives. */
-    .hist-table tr.hover-acct:not(.mismatch) td{color:var(--hover-acct,#7dd3fc)}
-    :host-context(body.light-theme) .hist-table tr.hover-acct:not(.mismatch) td{color:var(--hover-acct-light,#0369a1)}
+    /* The app sets --ff-accent from the extension's themeColor, so the hover tint
+       follows the user's theme with no hardcoded hex here. One rule covers both
+       themes: the custom property inherits into this shadow root already. */
+    .hist-table tr.hover-acct:not(.mismatch) td{color:var(--ff-accent,#007acc)}
     .hist-table tr.mismatch td{color:var(--ff-warning-text,#ffd866)}
+    .hint-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 10px;padding:7px 12px;background:var(--ff-bg-subpanel,#2a2a2a);border:1px solid var(--ff-border,#3e3e3e);border-radius:6px;font-size:var(--ff-font-sm);color:var(--ff-text-muted,#858585)}
+    /* Span both columns of .two-col, else the bar lands in the left cell only. */
+    .two-col > .hint-bar{grid-column:1 / -1;margin-bottom:12px}
+    .hint-bar b{color:var(--ff-text,#d4d4d4);font-variant-numeric:tabular-nums}
+    .hint-bar .acct{color:var(--ff-text-strong,#fff);font-weight:700}
+    .hint-bar .rows{padding:1px 8px;border-radius:10px;border:1px solid var(--ff-border,#3e3e3e);font-weight:700}
   `] as any : [];
 
   finance: any = null;
@@ -111,8 +120,14 @@ export class BudgetOverviewView extends Base {
   private selRev = 0;
   /** Mismatched account ids for the current render. Recomputed in render(). */
   private bad: Set<number> = new Set();
-  /** Account id under the cursor, or null. Every row on this account lights up. */
-  private hoverAcct: number | null = null;
+  /** Row key (p:<pot_key> / f:<flow_key>) -> pairing group index. */
+  private groupOf = new Map<string, number>();
+  /** Pairing groups, indexed the same as groupOf. */
+  private groups: PairingGroup[] = [];
+  /** Pairing group index under the cursor, or null. */
+  private hoverGroup: number | null = null;
+  /** Which section the hovered row belongs to, so the hint can sit in it. */
+  private hoverSection: 'saving' | 'expense' | 'move' | null = null;
 
   async setFinance(f: any): Promise<void> {
     this.finance = f;
@@ -123,7 +138,11 @@ export class BudgetOverviewView extends Base {
     if (!this.finance) return;
     try {
       this.error = '';
-      this.confirmKey = null;      this.pots = await listCurrentPots(this.finance);
+      this.confirmKey = null;
+      // Group indices are rebuilt from scratch below, so a stale one would point
+      // at the wrong group (or nothing) in the hover hint.
+      this.hoverGroup = null;
+      this.pots = await listCurrentPots(this.finance);
       this.flows = await listCurrentFlows(this.finance);
       this.accountLabels = await accountById(this.finance);
       // Drop selections for rows that no longer exist (e.g. after archive).
@@ -261,28 +280,107 @@ export class BudgetOverviewView extends Base {
     this.bumpSel();
   }
 
-  /** Highlight every row on the hovered account. No-ops if unchanged. */
-  private setHoverAcct(accountId: number | null | undefined): void {
-    const next = accountId == null ? null : Number(accountId);
-    if (this.hoverAcct === next) return;
-    this.hoverAcct = next;
+  /** Row key used by the pairing map. Pots and flows share one namespace. */
+  private static rowKey(row: any): string {
+    return row.pot_key != null ? `p:${row.pot_key}` : `f:${row.flow_key}`;
+  }
+
+  /** Rebuild the pot/line <-> move pairing map for the current data. */
+  private buildPairing(): void {
+    this.groupOf.clear();
+    this.groups = computePairingGroups(this.pots, this.flows);
+    this.groups.forEach((g, i) => {
+      for (const p of g.pots) this.groupOf.set(BudgetOverviewView.rowKey(p), i);
+      for (const f of g.moves) this.groupOf.set(BudgetOverviewView.rowKey(f), i);
+    });
+  }
+
+  /**
+   * Hover hint: what the highlighted group adds up to. Handles all three group
+   * shapes - both sides (compare), pots only (nothing funds it), moves only
+   * (nothing funds it).
+   */
+  private hoverHint(): unknown {
+    if (this.hoverGroup == null) return nothing;
+    const g = this.groups[this.hoverGroup];
+    if (!g) return nothing;
+    const n = g.pots.length + g.moves.length;
+    if (n === 0) return nothing;
+    const planned = g.pots.reduce((t, p) => t + Number(p.weekly_amount || 0), 0);
+    const moved = g.moves.reduce((t, f) => t + Number(f.weekly_amount || 0), 0);
+    const acct = resolveAccountLabel(this.accountLabels, g.pots[0]?.account_id ?? g.moves[0]?.account_id);
+    const rows = `${n} row${n === 1 ? '' : 's'}`;
+
+    if (g.pots.length && g.moves.length) {
+      const ok = planned === moved;
+      return html`<span class="acct">${acct ?? 'Unassigned'}</span>
+        <span class="rows">${rows}</span>
+        <span>planned <b>${BudgetOverviewView.aud(planned)}</b></span>
+        <span>moved <b>${BudgetOverviewView.aud(moved)}</b></span>
+        <span class=${ok ? 'ok' : 'warn'}>${ok ? 'balanced' : `off by ${BudgetOverviewView.aud(Math.abs(planned - moved))}`}</span>`;
+    }
+    const only = g.pots.length ? 'planned' : 'moved';
+    const sum = g.pots.length ? planned : moved;
+    return html`<span class="acct">${acct ?? 'Unassigned'}</span>
+      <span class="rows">${rows}</span>
+      <span>${only} <b>${BudgetOverviewView.aud(sum)}</b></span>
+      <span class="warn">no ${g.pots.length ? 'move funds this' : 'pot funds this'}</span>`;
+  }
+
+  /** Which section a row renders in, so the hint can sit in that section. */
+  private static sectionOf(row: any): 'saving' | 'expense' | 'move' {
+    if (row?.flow_key != null || row?.day != null) return 'move';
+    return row?.kind === 'expense' ? 'expense' : 'saving';
+  }
+
+  /**
+   * Highlight every row paired with this one. No-ops if neither the group nor
+   * the section changed, which keeps the cursor sliding within a group from
+   * re-rendering.
+   */
+  private setHoverGroup(row: any | null): void {
+    const next = row ? (this.groupOf.get(BudgetOverviewView.rowKey(row)) ?? null) : null;
+    const nextSection = row ? BudgetOverviewView.sectionOf(row) : null;
+    if (this.hoverGroup === next && this.hoverSection === nextSection) return;
+    this.hoverGroup = next;
+    this.hoverSection = nextSection;
     (this as any).requestUpdate?.();
   }
 
-  /** True when this row's account is the one under the cursor. */
-  private isHovered(accountId: number | null | undefined): boolean {
-    return this.hoverAcct != null && accountId != null && Number(accountId) === this.hoverAcct;
+  /**
+   * Clear the highlight unless the pointer moved to another row in the SAME
+   * group. Without this, sliding from one line to its sibling would flicker.
+   */
+  private onRowLeave(e: MouseEvent, row: any): void {
+    const to = (e.relatedTarget ?? null) as HTMLElement | null;
+    const toRow = to?.closest?.('tr') as HTMLElement | null;
+    if (toRow) {
+      // Unpaired rows carry no data-grp at all, so this cannot collide with
+      // group 0 the way a data-grp="" sentinel would.
+      const toGrp = toRow.getAttribute('data-grp');
+      if (toGrp != null && Number(toGrp) === this.groupOf.get(BudgetOverviewView.rowKey(row))) return;
+    }
+    this.setHoverGroup(null);
   }
 
   /** Class list + hover handlers shared by the pot/line and move rows. */
   private rowAttrs(row: any, sel: Set<string> | undefined, extra: string): string {
-    return [
-      sel?.has(row.pot_key ?? row.flow_key) ? 'selected' : '',
-      extra,
-      this.isHovered(row.account_id) ? 'hover-acct' : '',
-    ]
+    const grp = this.groupOf.get(BudgetOverviewView.rowKey(row));
+    return [sel?.has(row.pot_key ?? row.flow_key) ? 'selected' : '', extra, grp != null && grp === this.hoverGroup ? 'hover-acct' : '']
       .filter(Boolean)
       .join(' ');
+  }
+
+  /** The hover hint, but only when the cursor is in one of `sections`. */
+  private sectionHint(sections: ('saving' | 'expense' | 'move')[]): unknown {
+    if (this.hoverSection == null || !sections.includes(this.hoverSection)) return nothing;
+    return this.hoverHint();
+  }
+
+  /** Wraps the hint in its bar, or renders nothing when not hovering. */
+  private sectionHintHtml(...sections: ('saving' | 'expense' | 'move')[]): unknown {
+    const hint = this.sectionHint(sections);
+    return hint === nothing ? '' : html`<div class="hint-bar">${hint}</div>`;
   }
 
   private pruneSel(set: Set<string>, validKeys: string[]): void {
@@ -336,8 +434,9 @@ export class BudgetOverviewView extends Base {
     const checked = sel?.has(p.pot_key) ?? false;
     const mism = !!bad?.has(Number(p.account_id));
     const classes = this.rowAttrs(p, sel, mism ? 'mismatch' : '');
-    return html`<tr class=${classes}
-      @mouseenter=${() => this.setHoverAcct(p.account_id)} @mouseleave=${() => this.setHoverAcct(null)}>
+    const grp = this.groupOf.get(BudgetOverviewView.rowKey(p));
+    return html`<tr class=${classes} data-grp=${grp == null ? nothing : grp}
+      @mouseenter=${() => this.setHoverGroup(p)} @mouseleave=${(e: MouseEvent) => this.onRowLeave(e, p)}>
       ${sel ? html`<td><input type="checkbox" ?checked=${checked} .checked=${checked} @change=${() => this.toggleSel(sel, p.pot_key)} aria-label="Select ${p.label}"></td>` : ''}
       <td>${p.label}</td><td>${acct ?? '—'}${mism ? ' ⚠' : ''}</td>
       <td class="num">${BudgetOverviewView.aud(p.weekly_amount)}</td>
@@ -348,8 +447,9 @@ export class BudgetOverviewView extends Base {
     const checked = this.selMoves.has(f.flow_key);
     const mism = !!bad?.has(Number(f.account_id));
     const classes = this.rowAttrs(f, this.selMoves, mism ? 'mismatch' : '');
-    return html`<tr class=${classes}
-      @mouseenter=${() => this.setHoverAcct(f.account_id)} @mouseleave=${() => this.setHoverAcct(null)}>
+    const grp = this.groupOf.get(BudgetOverviewView.rowKey(f));
+    return html`<tr class=${classes} data-grp=${grp == null ? nothing : grp}
+      @mouseenter=${() => this.setHoverGroup(f)} @mouseleave=${(e: MouseEvent) => this.onRowLeave(e, f)}>
       <td><input type="checkbox" ?checked=${checked} .checked=${checked} @change=${() => this.toggleSel(this.selMoves, f.flow_key)} aria-label="Select ${f.label}"></td>
       <td>${f.label}</td><td>${f.day === 'friday' ? 'Friday' : 'Sunday'}</td><td>${resolveAccountLabel(this.accountLabels, f.account_id) ?? '—'}${mism ? ' ⚠' : ''}</td>
       <td class="num">${BudgetOverviewView.aud(f.weekly_amount)}</td>
@@ -414,6 +514,7 @@ export class BudgetOverviewView extends Base {
     if (typeof HTMLElement === 'undefined') return html``;
     // Once per render: the pot/line tables and the moves table all read this.
     this.bad = this.mismatchedAccounts();
+    this.buildPairing();
     const b = this.balance ?? { income_weekly: 0, savings_weekly: 0, expenses_weekly: 0, balance_weekly: 0, moves_weekly: 0, moves_gap_weekly: 0 };
     const balanced = Number(b.balance_weekly) >= 0;
     const gap = Math.round(Number(b.moves_gap_weekly || 0) * 100) / 100;
@@ -465,10 +566,11 @@ export class BudgetOverviewView extends Base {
           </div>
         </div>
         <div class="two-col" style="order:${this.sectionIndex('plans')}">
+        ${this.sectionHintHtml('saving', 'expense')}
         ${this.summaryHtml('Savings pots', 'Pot', savings, this.showSavings, () => { this.showSavings = !this.showSavings; (this as any).requestUpdate?.(); }, this.selSavings, 'pot-edit-request', 'pot-archive-request', 'pot-archive-bulk', 'savings')}
         ${this.summaryHtml('Expense lines', 'Line', expenses, this.showExpenses, () => { this.showExpenses = !this.showExpenses; (this as any).requestUpdate?.(); }, this.selExpenses, 'pot-edit-request', 'pot-archive-request', 'pot-archive-bulk', 'expenses')}
         </div>
-        <div style="order:${this.sectionIndex('moves')}">${this.movesHtml()}</div>
+        <div style="order:${this.sectionIndex('moves')}">${this.sectionHintHtml('move')}${this.movesHtml()}</div>
         ${this.trace.length ? html`<div class="section" style="order:${this.sectionIndex('trace')}">
           <button class="group-head ${this.showTrace ? 'open' : ''}" @click=${() => { this.showTrace = !this.showTrace; (this as any).requestUpdate?.(); }} aria-expanded=${this.showTrace ? 'true' : 'false'}>
             <span class="chev"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
