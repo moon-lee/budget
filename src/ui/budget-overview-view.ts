@@ -73,13 +73,16 @@ export class BudgetOverviewView extends Base {
     .hist-table input[type=checkbox]{accent-color:var(--ff-accent,#007acc);width:14px;height:14px;cursor:pointer}
     .hist-table tr.selected td{background:var(--ff-bg-input,#3c3c3c)}
     .hist-table tr.acct td.acct-cell{color:var(--hue,#888)}
-    /* Hover tints the whole row in its account colour. Rows with no account keep
-       no .acct class; mismatched rows are excluded so the gold survives. */
-    .hist-table tr.acct:not(.mismatch):hover td{color:var(--hue,#888)}
+    /* Hovering any row lights up EVERY row on that account (pot, line and move
+       share one hue), so the whole pairing is visible at once. Driven by the
+       hover-acct class rather than :hover, since the cursor is on one row while
+       the highlight spans all three tables. Mismatched rows opt out so the gold
+       survives. */
+    .hist-table tr.acct.hover-acct:not(.mismatch) td{color:var(--hue,#888)}
     :host-context(body.light-theme) .hist-table tr.acct td.acct-cell{color:var(--hue-light,#64748b)}
-    :host-context(body.light-theme) .hist-table tr.acct:not(.mismatch):hover td{color:var(--hue-light,#64748b)}
-    /* Mismatch wins over the account hue, hover or not. acct-cell is repeated so
-       this ties .acct td.acct-cell on specificity and wins on source order. */
+    :host-context(body.light-theme) .hist-table tr.acct.hover-acct:not(.mismatch) td{color:var(--hue-light,#64748b)}
+    /* Mismatch wins over the account hue, hovered or not. acct-cell is repeated
+       so this ties .acct td.acct-cell on specificity and wins on source order. */
     .hist-table tr.mismatch td,
     .hist-table tr.mismatch td.acct-cell{color:var(--ff-warning-text,#ffd866)}
   `] as any : [];
@@ -115,6 +118,8 @@ export class BudgetOverviewView extends Base {
   private selRev = 0;
   /** Mismatched account ids for the current render. Recomputed in render(). */
   private bad: Set<number> = new Set();
+  /** Account id under the cursor, or null. Every row on this account lights up. */
+  private hoverAcct: number | null = null;
 
   async setFinance(f: any): Promise<void> {
     this.finance = f;
@@ -263,6 +268,31 @@ export class BudgetOverviewView extends Base {
     this.bumpSel();
   }
 
+  /** Highlight every row on the hovered account. No-ops if unchanged. */
+  private setHoverAcct(accountId: number | null | undefined): void {
+    const next = accountId == null ? null : Number(accountId);
+    if (this.hoverAcct === next) return;
+    this.hoverAcct = next;
+    (this as any).requestUpdate?.();
+  }
+
+  /** True when this row's account is the one under the cursor. */
+  private isHovered(accountId: number | null | undefined): boolean {
+    return this.hoverAcct != null && accountId != null && Number(accountId) === this.hoverAcct;
+  }
+
+  /** Class list + hover handlers shared by the pot/line and move rows. */
+  private rowAttrs(p: any, sel: Set<string> | undefined, extra: string): string {
+    return [
+      sel?.has(p.pot_key ?? p.flow_key) ? 'selected' : '',
+      huePairForAccount(this.accountLabels, p.account_id) ? 'acct' : '',
+      extra,
+      this.isHovered(p.account_id) ? 'hover-acct' : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+  }
+
   private pruneSel(set: Set<string>, validKeys: string[]): void {
     const valid = new Set(validKeys);
     let changed = false;
@@ -314,10 +344,11 @@ export class BudgetOverviewView extends Base {
     const acct = resolveAccountLabel(this.accountLabels, p.account_id);
     const checked = sel?.has(p.pot_key) ?? false;
     const mism = !!bad?.has(Number(p.account_id));
-    const classes = [checked ? 'selected' : '', hp ? 'acct' : '', mism ? 'mismatch' : ''].filter(Boolean).join(' ');
-    return html`<tr class=${classes} style=${hp ? `--hue:${hp.hue};--hue-light:${hp.hueLight}` : ''}>
+    const classes = this.rowAttrs(p, sel, mism ? 'mismatch' : '');
+    return html`<tr class=${classes} style=${hp ? `--hue:${hp.hue};--hue-light:${hp.hueLight}` : ''}
+      @mouseenter=${() => this.setHoverAcct(p.account_id)} @mouseleave=${() => this.setHoverAcct(null)}>
       ${sel ? html`<td><input type="checkbox" ?checked=${checked} .checked=${checked} @change=${() => this.toggleSel(sel, p.pot_key)} aria-label="Select ${p.label}"></td>` : ''}
-      <td>${p.label}</td><td class="acct-cell">${acct ?? '—'}${bad?.has(Number(p.account_id)) ? ' ⚠' : ''}</td>
+      <td>${p.label}</td><td class="acct-cell">${acct ?? '—'}${mism ? ' ⚠' : ''}</td>
       <td class="num">${BudgetOverviewView.aud(p.weekly_amount)}</td>
     </tr>`;
   }
@@ -326,10 +357,11 @@ export class BudgetOverviewView extends Base {
     const hp = huePairForAccount(this.accountLabels, f.account_id);
     const checked = this.selMoves.has(f.flow_key);
     const mism = !!bad?.has(Number(f.account_id));
-    const classes = [checked ? 'selected' : '', hp ? 'acct' : '', mism ? 'mismatch' : ''].filter(Boolean).join(' ');
-    return html`<tr class=${classes} style=${hp ? `--hue:${hp.hue};--hue-light:${hp.hueLight}` : ''}>
+    const classes = this.rowAttrs(f, this.selMoves, mism ? 'mismatch' : '');
+    return html`<tr class=${classes} style=${hp ? `--hue:${hp.hue};--hue-light:${hp.hueLight}` : ''}
+      @mouseenter=${() => this.setHoverAcct(f.account_id)} @mouseleave=${() => this.setHoverAcct(null)}>
       <td><input type="checkbox" ?checked=${checked} .checked=${checked} @change=${() => this.toggleSel(this.selMoves, f.flow_key)} aria-label="Select ${f.label}"></td>
-      <td>${f.label}</td><td>${f.day === 'friday' ? 'Friday' : 'Sunday'}</td><td class="acct-cell">${resolveAccountLabel(this.accountLabels, f.account_id) ?? '—'}${bad?.has(Number(f.account_id)) ? ' ⚠' : ''}</td>
+      <td>${f.label}</td><td>${f.day === 'friday' ? 'Friday' : 'Sunday'}</td><td class="acct-cell">${resolveAccountLabel(this.accountLabels, f.account_id) ?? '—'}${mism ? ' ⚠' : ''}</td>
       <td class="num">${BudgetOverviewView.aud(f.weekly_amount)}</td>
     </tr>`;
   }

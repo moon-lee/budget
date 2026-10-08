@@ -1,13 +1,13 @@
 {
   "name": "budget",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "private": true,
   "type": "module",
   "main": "src/main.ts",
   "financeExtension": {
     "id": "budget",
     "displayName": "Budget",
-    "version": "0.2.5",
+    "version": "0.2.6",
     "description": "Plan diary with re-allocation history (CashFlow sheet parity)",
     "themeColor": "#EA580C",
     "activationEvents": [
