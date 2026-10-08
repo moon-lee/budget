@@ -72,7 +72,6 @@ export class BudgetOverviewView extends Base {
     .sel-bar .btn-link.danger{color:var(--ff-danger,#f48771)}
     .hist-table input[type=checkbox]{accent-color:var(--ff-accent,#007acc);width:14px;height:14px;cursor:pointer}
     .hist-table tr.selected td{background:var(--ff-bg-input,#3c3c3c)}
-    .hist-table tr.mismatch td{color:var(--ff-warning-text,#ffd866)}
     .hist-table tr.acct td:first-child{box-shadow:inset 3px 0 0 var(--hue,#888)}
     .hist-table tr.acct td.acct-cell{color:var(--hue,#888)}
     :host-context(body.light-theme) .hist-table tr.acct td:first-child{box-shadow:inset 3px 0 0 var(--hue-light,#64748b)}
@@ -329,9 +328,11 @@ export class BudgetOverviewView extends Base {
     const friday = BudgetOverviewView.sumWeekly(this.flowsForDay('friday'));
     const sunday = BudgetOverviewView.sumWeekly(this.flowsForDay('sunday'));
     const combined = Math.round((friday + sunday) * 100) / 100;
-    const planned = BudgetOverviewView.sumWeekly(this.pots);
-    const gap = Math.round((planned - combined) * 100) / 100;
-    const off = gap !== 0;
+    // Warn off the per-account rollup, not the grand totals: two accounts drifting
+    // in opposite directions cancel out and would leave the header clean while
+    // ⚠ markers show. The Moves card keeps its own signed gap (below) because it
+    // needs the direction.
+    const off = this.mismatchedAccounts().size > 0;
     const rows = this.visibleMoves();
     const shown = this.showMoves;
     const toggle = () => { this.showMoves = !this.showMoves; (this as any).requestUpdate?.(); };
