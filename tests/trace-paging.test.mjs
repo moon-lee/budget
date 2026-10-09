@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   TRACE_PAGE_SIZE,
+  TRACE_SORTS,
   clampPage,
   distinctTraceItems,
   filterTrace,
@@ -9,6 +10,7 @@ import {
   pageCount,
   pageSlice,
   pageWindow,
+  sortTrace,
 } from '../build/test/ui/trace-paging.js';
 
 const rows = (labels) =>
@@ -159,5 +161,83 @@ describe('pageWindow', () => {
   it('clamps an out-of-range current page before windowing', () => {
     // 99 -> 5, so the window is pages 3..5 plus the first page; 2 is out of range.
     assert.deepEqual(pageWindow(99, 5), [1, 3, 4, 5]);
+  });
+});
+
+describe('sortTrace', () => {
+  // Two rows whose To dates disagree with their From dates, so ordering by the
+  // wrong column is detectable rather than coincidentally correct.
+  const data = [
+    { label: 'A', effective_from: '2026-01-01', effective_to: '2026-06-01' },
+    { label: 'B', effective_from: '2026-03-01', effective_to: '2026-02-01' },
+    { label: 'C', effective_from: '2026-02-01', effective_to: '2026-09-01' },
+  ];
+  const order = (rows) => rows.map((r) => r.label);
+
+  it('sorts by closed date, newest first by default', () => {
+    assert.deepEqual(order(sortTrace(data)), ['C', 'A', 'B']);
+    assert.deepEqual(order(sortTrace(data, 'to-desc')), ['C', 'A', 'B']);
+  });
+
+  it('sorts by closed date, oldest first', () => {
+    assert.deepEqual(order(sortTrace(data, 'to-asc')), ['B', 'A', 'C']);
+  });
+
+  it('sorts by start date independently of the closed date', () => {
+    assert.deepEqual(order(sortTrace(data, 'from-desc')), ['B', 'C', 'A']);
+    assert.deepEqual(order(sortTrace(data, 'from-asc')), ['A', 'C', 'B']);
+  });
+
+  it('does not mutate the input', () => {
+    const copy = data.map((r) => ({ ...r }));
+    sortTrace(data, 'from-asc');
+    assert.deepEqual(data, copy);
+  });
+
+  it('sinks rows with no date to the bottom in either direction', () => {
+    const withGap = [
+      { label: 'X', effective_from: '', effective_to: '' },
+      ...data,
+    ];
+    for (const dir of ['to-desc', 'to-asc', 'from-desc', 'from-asc']) {
+      const out = order(sortTrace(withGap, dir));
+      assert.equal(
+        out[out.length - 1],
+        'X',
+        `${dir}: undated row must be last`,
+      );
+    }
+  });
+
+  it('keeps undated rows last but still orders the dated ones', () => {
+    const out = order(
+      sortTrace(
+        [{ label: 'X', effective_from: null, effective_to: null }, ...data],
+        'to-desc',
+      ),
+    );
+    assert.deepEqual(out, ['C', 'A', 'B', 'X']);
+  });
+
+  it('handles a null value as undated rather than throwing', () => {
+    const out = sortTrace([{ label: 'X', effective_to: null }], 'to-desc');
+    assert.deepEqual(order(out), ['X']);
+  });
+
+  it('returns an empty array unchanged for no rows', () => {
+    assert.deepEqual(sortTrace([], 'from-asc'), []);
+  });
+});
+
+describe('TRACE_SORTS', () => {
+  it('offers all four orderings and defaults to the first', () => {
+    assert.deepEqual(
+      TRACE_SORTS.map((s) => s.value),
+      ['to-desc', 'to-asc', 'from-desc', 'from-asc'],
+    );
+    assert.equal(TRACE_SORTS[0].value, 'to-desc');
+  });
+  it('gives every entry a label', () => {
+    for (const s of TRACE_SORTS) assert.equal(typeof s.label, 'string');
   });
 });

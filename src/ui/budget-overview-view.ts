@@ -4,6 +4,7 @@ import { accountById, resolveAccountLabel } from '../dao/accounts.js';
 import { computePairingGroups, mismatchedRowKeys, rowKeyOf, type PairingGroup } from './row-pairing.js';
 import {
   TRACE_PAGE_SIZE,
+  TRACE_SORTS,
   clampPage,
   distinctTraceItems,
   filterTrace,
@@ -11,6 +12,8 @@ import {
   pageCount,
   pageSlice,
   pageWindow,
+  sortTrace,
+  type TraceSort,
 } from './trace-paging.js';
 import { listPotHistory } from '../dao/pots.js';
 import { balanceCheck } from '../services/budget-service.js';
@@ -91,11 +94,18 @@ export class BudgetOverviewView extends Base {
        themes: the custom property inherits into this shadow root already. */
     .hist-table tr.hover-acct:not(.mismatch) td{color:var(--ff-accent,#007acc)}
     .hist-table tr.mismatch td{color:var(--ff-warning-text,#ffd866)}
-    .trace-bar{display:flex;align-items:center;gap:12px;margin:0 0 8px;font-size:var(--ff-font-sm);color:var(--ff-text-muted,#858585)}
-    .trace-filter{display:flex;align-items:center;gap:6px;font-weight:700}
-    .trace-filter select{background:var(--ff-bg-input,#3c3c3c);border:1px solid var(--ff-border,#3e3e3e);border-radius:var(--ff-radius-sm,3px);color:var(--ff-text,#d4d4d4);font-size:var(--ff-font-sm);padding:3px 8px;min-width:150px}
+    /* One header bar: the toggle button and the filter read as a single unit.
+       .group-head carries width:100% for standalone sections, which inside this
+       flex row would claim the full width and push the filter past .section's
+       overflow:hidden - hence width:auto and flex. */
+    .trace-head{display:flex;align-items:center;gap:10px;margin:0;padding:7px 12px;background:var(--ff-bg-subpanel,#2a2a2a);border-bottom:1px solid var(--ff-border,#3e3e3e)}
+    .trace-head > .group-head{flex:1 1 auto;min-width:0;width:auto;margin:0;padding:0;background:transparent;border:0;border-radius:0;color:inherit}
+    .trace-head > .group-head:hover{background:rgba(127,127,127,.12)}
+    .trace-count{flex:0 0 auto;font-size:var(--ff-font-sm);color:var(--ff-text-muted,#858585);white-space:nowrap}
+    .trace-filter{display:flex;align-items:center;gap:6px;font-weight:700;flex:0 0 auto;font-size:var(--ff-font-sm);color:var(--ff-text-muted,#858585)}
+    .trace-filter select{background:var(--ff-bg-input,#3c3c3c);border:1px solid var(--ff-border,#3e3e3e);border-radius:var(--ff-radius-sm,3px);color:var(--ff-text,#d4d4d4);font-size:var(--ff-font-sm);padding:3px 8px;max-width:190px}
     .trace-empty{text-align:center;color:var(--ff-text-muted,#858585);padding:16px 10px;font-style:italic}
-    .pager{display:flex;align-items:center;gap:6px;margin:8px 0 0;font-size:var(--ff-font-sm);color:var(--ff-text-muted,#858585)}
+    .pager{display:flex;align-items:center;gap:6px;margin:0;padding:8px 12px;font-size:var(--ff-font-sm);color:var(--ff-text-muted,#858585)}
     .pager .page-num{min-width:24px;padding:1px 6px;border:1px solid transparent;border-radius:var(--ff-radius-sm,3px);color:var(--ff-text-muted,#858585)}
     .pager .page-num.on{border-color:var(--ff-accent,#007acc);color:var(--ff-text,#d4d4d4);font-weight:700}
     .pager .page-num.gap{margin-left:6px;border-left-color:var(--ff-border,#3e3e3e)}
@@ -150,6 +160,8 @@ export class BudgetOverviewView extends Base {
   private tracePage = 1;
   /** Distinct item labels for the trace filter dropdown. */
   private traceItems: string[] = [];
+  /** Trace ordering: by closed or start date, newest or oldest first. */
+  private traceSort: TraceSort = 'to-desc';
   /** Which selection is mid-confirm: null | 'savings' | 'expenses' | 'moves'. */
   private confirmKey: string | null = null;
   /** Bumped on every selection change so checkbox bindings re-apply. */
@@ -520,9 +532,32 @@ export class BudgetOverviewView extends Base {
     return html`<div class="hint-bar">${this.sectionHint()}</div>`;
   }
 
-  /** Plan trace body: item filter, one page of rows, and the pager. */
+  /**
+   * The Item filter for the trace. Lives in the section header rather than the
+   * body, so it stays reachable without scrolling a long history.
+   *
+   * It sits OUTSIDE the header's toggle button: a <select> nested in a <button>
+   * is invalid and would fire the expand/collapse on every selection.
+   */
+  private traceFilterHtml(): unknown {
+    const n = filterTrace(this.trace, this.traceItem).length;
+    return html`<label class="trace-filter">Item
+        <select @change=${(e: Event) => { this.traceItem = (e.target as HTMLSelectElement).value; this.tracePage = 1; (this as any).requestUpdate?.(); }}>
+          <option value="" ?selected=${this.traceItem === ''}>All items</option>
+          ${this.traceItems.map((it) => html`<option value=${it} ?selected=${this.traceItem === it}>${it}</option>`)}
+        </select>
+      </label>
+      <label class="trace-filter">Order
+        <select @change=${(e: Event) => { this.traceSort = (e.target as HTMLSelectElement).value as TraceSort; this.tracePage = 1; (this as any).requestUpdate?.(); }}>
+          ${TRACE_SORTS.map((s) => html`<option value=${s.value} ?selected=${this.traceSort === s.value}>${s.label}</option>`)}
+        </select>
+      </label>
+      <span class="trace-count">${n} row${n === 1 ? '' : 's'}${this.traceItem ? ` for ${this.traceItem}` : ''}</span>`;
+  }
+
+  /** Plan trace body: one page of rows and the pager. */
   private traceHtml(): unknown {
-    const filtered = filterTrace(this.trace, this.traceItem);
+    const filtered = sortTrace(filterTrace(this.trace, this.traceItem), this.traceSort);
     const pages = pageCount(filtered.length, TRACE_PAGE_SIZE);
     // Re-clamp every render: filtering or archiving can shrink the list under
     // the current page, which would otherwise render an empty table.
@@ -534,16 +569,7 @@ export class BudgetOverviewView extends Base {
     };
     const win = pageWindow(this.tracePage, pages);
 
-    return html`<div class="trace-bar">
-        <label class="trace-filter">Item
-          <select @change=${(e: Event) => { this.traceItem = (e.target as HTMLSelectElement).value; this.tracePage = 1; (this as any).requestUpdate?.(); }}>
-            <option value="" ?selected=${this.traceItem === ''}>All items</option>
-            ${this.traceItems.map((it) => html`<option value=${it} ?selected=${this.traceItem === it}>${it}</option>`)}
-          </select>
-        </label>
-        <span class="trace-count">${filtered.length} row${filtered.length === 1 ? '' : 's'}${this.traceItem ? ` for ${this.traceItem}` : ''}</span>
-      </div>
-      <div class="table-wrap"><table class="hist-table">
+    return html`<div class="table-wrap"><table class="hist-table">
         <thead><tr><th>Item</th><th class="num">Weekly</th><th>From</th><th>To</th><th>Note</th></tr></thead>
         <tbody>${rows.length
           ? rows.map((r: any) => html`<tr class="trace">
@@ -624,12 +650,15 @@ export class BudgetOverviewView extends Base {
         </div>
         <div style="order:${this.sectionIndex('moves')}">${this.sectionHintHtml()}${this.movesHtml()}</div>
         ${this.trace.length ? html`<div class="section" style="order:${this.sectionIndex('trace')}">
-          <button class="group-head ${this.showTrace ? 'open' : ''}" @click=${() => { this.showTrace = !this.showTrace; (this as any).requestUpdate?.(); }} aria-expanded=${this.showTrace ? 'true' : 'false'}>
-            <span class="chev"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-            <span class="t">Plan trace</span>
-            <span class="section-badge">${this.trace.length}</span>
-            <span class="sum">Closed history rows</span>
-          </button>
+          <div class="trace-head">
+            <button class="group-head ${this.showTrace ? 'open' : ''}" @click=${() => { this.showTrace = !this.showTrace; (this as any).requestUpdate?.(); }} aria-expanded=${this.showTrace ? 'true' : 'false'}>
+              <span class="chev"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+              <span class="t">Plan trace</span>
+              <span class="section-badge">${this.trace.length}</span>
+              <span class="sum">Closed history rows</span>
+            </button>
+            ${this.showTrace ? this.traceFilterHtml() : ''}
+          </div>
           ${this.showTrace ? this.traceHtml() : ''}
         </div>` : ''}
         </div>

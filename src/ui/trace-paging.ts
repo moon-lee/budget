@@ -10,6 +10,43 @@
 export const TRACE_PAGE_SIZE = 10;
 
 /**
+ * Sort keys for the Plan trace.
+ *
+ * `to-*` orders by when the row was closed (effective_to), `from-*` by when it
+ * opened (effective_from). `desc` is newest first, which is the default: the
+ * most recent change is what you want to see.
+ */
+export type TraceSort = 'to-desc' | 'to-asc' | 'from-desc' | 'from-asc';
+
+export const TRACE_SORTS: ReadonlyArray<{ value: TraceSort; label: string }> = [
+  { value: 'to-desc', label: 'Closed date, newest first' },
+  { value: 'to-asc', label: 'Closed date, oldest first' },
+  { value: 'from-desc', label: 'Start date, newest first' },
+  { value: 'from-asc', label: 'Start date, oldest first' },
+];
+
+/**
+ * Order trace rows by date.
+ *
+ * Returns a new array; the input is left alone. Rows with a missing date sort
+ * last in every direction rather than jumping to the top, so an undated row
+ * never displaces the one you were looking at.
+ */
+export function sortTrace(rows: any[], sort: TraceSort = 'to-desc'): any[] {
+  const key = sort.startsWith('from') ? 'effective_from' : 'effective_to';
+  const desc = sort.endsWith('desc');
+  return [...rows].sort((a, b) => {
+    const av = String(a?.[key] ?? '');
+    const bv = String(b?.[key] ?? '');
+    // Empty dates sink to the bottom regardless of direction.
+    if (!av && !bv) return 0;
+    if (!av) return 1;
+    if (!bv) return -1;
+    return (av < bv ? -1 : av > bv ? 1 : 0) * (desc ? -1 : 1);
+  });
+}
+
+/**
  * Distinct item labels, alphabetically, blanks dropped.
  *
  * Drives the filter dropdown. Sorted so the option list does not reshuffle
