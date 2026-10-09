@@ -17,56 +17,67 @@ function yearly(weekly: number): number {
 
 /** Exported so the pot form's "per year" hint uses the same month count. */
 export const MONTHS_PER_YEAR = 12;
-/** 365.2425 / 7 — the mean solar year, so a week is 1/52.1775 of it. */
+/** 365.2425 / 7 — the mean solar year, used for annual-provision figures. */
 export const WEEKS_PER_YEAR = 365.2425 / 7;
+/**
+ * The divisor for monthly entry: a flat 4 weeks per month.
+ *
+ * A real mean month is 4.348 weeks, so this over-provisions every monthly line
+ * by ~8.7% on the expense side. That is the deliberate trade - a budget plan is
+ * allowed to sit over budget on expenses, and the simple rule is easier to
+ * reason about and to reproduce by hand than a mean-year fraction.
+ */
+export const WEEKS_PER_MONTH = 4;
 
 /**
- * Monthly → weekly (§8 amendment 2026-10-08, rounding revised twice).
+ * Monthly → weekly (rounding revised 2026-10-08, divisor revised 2026-10-09).
  *
- * Most expenses are quoted monthly (power, mobile, insurance, rego) but
- * every consumer of `weekly_amount` is weekly, so monthly is an entry
- * convenience that divides once here. Uses the mean-year divisor so the
- * result is the correct average week rather than one derived from a
- * nominal 4 weeks/month.
+ * Most expenses are quoted monthly (power, mobile, insurance, rego) but every
+ * consumer of `weekly_amount` is weekly, so monthly is an entry convenience
+ * that divides once here — by a flat 4 weeks per month.
+ *
+ * ## Why 4 and not the mean 4.348
+ *
+ * Dividing by the true mean month gives the tightest possible weekly figure,
+ * but it is a fraction the user cannot reproduce by hand, and it leaves the
+ * plan sitting exactly on the bill with no margin. A flat 4 is simple to
+ * explain, easy to check against a real payslip, and errs toward over-budget
+ * on the expense side — which is the safe direction. A line that is entered
+ * monthly is deliberately given a little headroom.
  *
  * ## Rounds UP to whole dollars, deliberately
  *
  * The weekly figure is the amount actually set aside each week, so it must
- * never come to less than the monthly bill implies. Ceil to the dollar, not
- * to the cent and not to nearest: a whole-dollar set-aside is what the user
- * moves, so fractional dollars are noise in both the plan and the move.
+ * never come to less than the monthly bill implies. Ceil to the dollar, not to
+ * the cent and not to nearest: a whole-dollar set-aside is what the user moves,
+ * so fractional dollars are noise in both the plan and the move.
  *
- * e.g. $180/month => $42/week; $275.50/month => $64/week.
+ * e.g. $160/month => $40/week; $275.50/month => $69/week.
  *
  * ## What this costs
  *
- * Over-provisioning is up to $0.99/week, i.e. ~$52/year per expense line —
- * materially more than a cent-level ceil. On a $180/month bill that is
- * $6.60/year banked rather than spent. Accepted deliberately: the shortfall
- * risk from rounding down is worse than the idle cash, and the line can be
- * set to weekly entry at any time when exactness matters.
+ * Over-provisioning is proportional, roughly 8.7% of the bill plus up to $0.99
+ * of ceil — on $275.50/month that is ~$294/year banked rather than spent. Unlike
+ * the previous mean-year divisor there is no per-line cap, because the divisor
+ * itself is short. Accepted deliberately: idle cash is recoverable, a shortfall
+ * is not, and any line can be switched to weekly entry when exactness matters.
  *
- * Known limit, not fixable here: `potYearly` multiplies by 52, and a year
- * is 52.18 weeks, so `potYearly` sits ~0.33% under `12 x monthly` for
- * every input. That gap predates this conversion; the ceil adds on top of
- * it, always in the safe direction.
- *
- * Reconstructing a monthly amount from the stored weekly figure can differ
- * by up to ~$0.99, since the cadence is not persisted.
+ * Reconstructing a monthly amount from the stored weekly figure cannot be exact,
+ * since the cadence is not persisted.
  */
 export function monthlyToWeekly(monthly: number): number {
   const m = Number(monthly);
   if (!Number.isFinite(m)) return 0;
   // Clamp at 0 first so a negative input cannot produce "-0".
-  const perWeek = Math.max(0, (m * MONTHS_PER_YEAR) / WEEKS_PER_YEAR);
+  const perWeek = Math.max(0, m / WEEKS_PER_MONTH);
   return Math.ceil(perWeek);
 }
 
 /**
  * Annual cost actually provisioned by a weekly set-aside, over the mean
- * year. Differs from `yearly()` (x 52) by the 0.33% week-count gap, and
- * from `12 x monthly` by the ceiling — both are real, so the UI shows this
- * rather than the bill when explaining a rounded-up monthly line.
+ * year. Differs from `yearly()` (x 52) by the 0.33% week-count gap, and from
+ * the bill by the 4-week divisor and the ceiling — both are real, so the UI
+ * shows this rather than the bill when explaining a monthly line.
  */
 export function weeklyProvisionYearly(weekly: number): number {
   const w = Number(weekly);
