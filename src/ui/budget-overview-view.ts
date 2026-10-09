@@ -2,6 +2,16 @@ import { LitElement, css, html, nothing } from 'lit';
 import { sharedStyles } from '../styles/shared-styles.js';
 import { accountById, resolveAccountLabel } from '../dao/accounts.js';
 import { computePairingGroups, mismatchedRowKeys, rowKeyOf, type PairingGroup } from './row-pairing.js';
+import {
+  TRACE_PAGE_SIZE,
+  clampPage,
+  distinctTraceItems,
+  filterTrace,
+  isPageGap,
+  pageCount,
+  pageSlice,
+  pageWindow,
+} from './trace-paging.js';
 import { listPotHistory } from '../dao/pots.js';
 import { balanceCheck } from '../services/budget-service.js';
 import { listCurrentPots } from '../dao/pots.js';
@@ -81,6 +91,26 @@ export class BudgetOverviewView extends Base {
        themes: the custom property inherits into this shadow root already. */
     .hist-table tr.hover-acct:not(.mismatch) td{color:var(--ff-accent,#007acc)}
     .hist-table tr.mismatch td{color:var(--ff-warning-text,#ffd866)}
+    .trace-bar{display:flex;align-items:center;gap:12px;margin:0 0 8px;font-size:var(--ff-font-sm);color:var(--ff-text-muted,#858585)}
+    .trace-filter{display:flex;align-items:center;gap:6px;font-weight:700}
+    .trace-filter select{background:var(--ff-bg-input,#3c3c3c);border:1px solid var(--ff-border,#3e3e3e);border-radius:var(--ff-radius-sm,3px);color:var(--ff-text,#d4d4d4);font-size:var(--ff-font-sm);padding:3px 8px;min-width:150px}
+    .trace-empty{text-align:center;color:var(--ff-text-muted,#858585);padding:16px 10px;font-style:italic}
+    .pager{display:flex;align-items:center;gap:6px;margin:8px 0 0;font-size:var(--ff-font-sm);color:var(--ff-text-muted,#858585)}
+    .pager .page-num{min-width:24px;padding:1px 6px;border:1px solid transparent;border-radius:var(--ff-radius-sm,3px);color:var(--ff-text-muted,#858585)}
+    .pager .page-num.on{border-color:var(--ff-accent,#007acc);color:var(--ff-text,#d4d4d4);font-weight:700}
+    .pager .page-num.gap{margin-left:6px;border-left-color:var(--ff-border,#3e3e3e)}
+    .pager .page-num:hover:not(.on){color:var(--ff-text,#d4d4d4)}
+    .pager .page-of{margin-left:auto}
+    /* Always rendered at a fixed height, so filling it in on hover never
+       reflows the tables below. An empty bar costs a reserved strip, not a jump. */
+    .hint-bar{display:flex;flex-wrap:nowrap;align-items:center;gap:8px;height:34px;margin:0 0 10px;padding:0 12px;background:var(--ff-bg-subpanel,#2a2a2a);border:1px solid var(--ff-border,#3e3e3e);border-radius:6px;font-size:var(--ff-font-sm);color:var(--ff-text-muted,#858585);overflow:hidden}
+    .hint-bar .idle{opacity:.6;font-style:italic}
+    .hint-bar .spacer{flex:1 1 auto;min-width:8px}
+    .hint-bar b{color:var(--ff-text,#d4d4d4);font-variant-numeric:tabular-nums}
+    .hint-bar .acct{color:var(--ff-text-strong,#fff);font-weight:700}
+    .hint-bar .rows{padding:1px 8px;border-radius:10px;border:1px solid var(--ff-border,#3e3e3e);font-weight:700;white-space:nowrap}
+    /* Span both columns of .two-col, else the bar lands in the left cell only. */
+    .two-col > .hint-bar{grid-column:1 / -1;margin-bottom:12px}
     .hint-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 10px;padding:7px 12px;background:var(--ff-bg-subpanel,#2a2a2a);border:1px solid var(--ff-border,#3e3e3e);border-radius:6px;font-size:var(--ff-font-sm);color:var(--ff-text-muted,#858585)}
     /* Span both columns of .two-col, else the bar lands in the left cell only. */
     .two-col > .hint-bar{grid-column:1 / -1;margin-bottom:12px}
@@ -114,6 +144,12 @@ export class BudgetOverviewView extends Base {
   selExpenses = new Set<string>();
   selMoves = new Set<string>();
   showTrace = false;
+  /** Plan trace item filter: '' means all items. */
+  private traceItem = '';
+  /** Current page of the Plan trace (1-based, re-clamped every render). */
+  private tracePage = 1;
+  /** Distinct item labels for the trace filter dropdown. */
+  private traceItems: string[] = [];
   /** Which selection is mid-confirm: null | 'savings' | 'expenses' | 'moves'. */
   private confirmKey: string | null = null;
   /** Bumped on every selection change so checkbox bindings re-apply. */
@@ -126,8 +162,6 @@ export class BudgetOverviewView extends Base {
   private groups: PairingGroup[] = [];
   /** Pairing group index under the cursor, or null. */
   private hoverGroup: number | null = null;
-  /** Which section the hovered row belongs to, so the hint can sit in it. */
-  private hoverSection: 'saving' | 'expense' | 'move' | null = null;
 
   async setFinance(f: any): Promise<void> {
     this.finance = f;
@@ -176,12 +210,16 @@ export class BudgetOverviewView extends Base {
         } catch { /* hidden when unavailable */ }
       }
       this.balance = await balanceCheck(this.finance, undefined, Number.isFinite(hostLive) && hostLive > 0 ? hostLive : undefined);
-      // plan trace: closed rows across all keys, newest first (cap 30)
+      // Plan trace: closed rows across all keys, newest first. Uncapped - the
+      // section pages and filters client-side, so a hard cap would hide history.
       const all = (await this.finance.db.table('budget_pots').find({})) as any[];
       this.trace = all
         .filter((r) => r.effective_to != null)
-        .sort((a, b) => (a.effective_to < b.effective_to ? 1 : -1))
-        .slice(0, 30);
+        .sort((a, b) => (a.effective_to < b.effective_to ? 1 : -1));
+      this.traceItems = distinctTraceItems(this.trace);
+      // The chosen item may have been archived away; drop it rather than
+      // leaving a filter selected that matches nothing.
+      if (this.traceItem && !this.traceItems.includes(this.traceItem)) this.traceItem = '';
     } catch (e: any) {
       this.error = String(e?.message || e);
     }
@@ -294,54 +332,13 @@ export class BudgetOverviewView extends Base {
   }
 
   /**
-   * Hover hint: what the highlighted group adds up to. Handles all three group
-   * shapes - both sides (compare), pots only (nothing funds it), moves only
-   * (nothing funds it).
-   */
-  private hoverHint(): unknown {
-    if (this.hoverGroup == null) return nothing;
-    const g = this.groups[this.hoverGroup];
-    if (!g) return nothing;
-    const n = g.pots.length + g.moves.length;
-    if (n === 0) return nothing;
-    const planned = g.pots.reduce((t, p) => t + Number(p.weekly_amount || 0), 0);
-    const moved = g.moves.reduce((t, f) => t + Number(f.weekly_amount || 0), 0);
-    const acct = resolveAccountLabel(this.accountLabels, g.pots[0]?.account_id ?? g.moves[0]?.account_id);
-    const rows = `${n} row${n === 1 ? '' : 's'}`;
-
-    if (g.pots.length && g.moves.length) {
-      const ok = planned === moved;
-      return html`<span class="acct">${acct ?? 'Unassigned'}</span>
-        <span class="rows">${rows}</span>
-        <span>planned <b>${BudgetOverviewView.aud(planned)}</b></span>
-        <span>moved <b>${BudgetOverviewView.aud(moved)}</b></span>
-        <span class=${ok ? 'ok' : 'warn'}>${ok ? 'balanced' : `off by ${BudgetOverviewView.aud(Math.abs(planned - moved))}`}</span>`;
-    }
-    const only = g.pots.length ? 'planned' : 'moved';
-    const sum = g.pots.length ? planned : moved;
-    return html`<span class="acct">${acct ?? 'Unassigned'}</span>
-      <span class="rows">${rows}</span>
-      <span>${only} <b>${BudgetOverviewView.aud(sum)}</b></span>
-      <span class="warn">no ${g.pots.length ? 'move funds this' : 'pot funds this'}</span>`;
-  }
-
-  /** Which section a row renders in, so the hint can sit in that section. */
-  private static sectionOf(row: any): 'saving' | 'expense' | 'move' {
-    if (row?.flow_key != null || row?.day != null) return 'move';
-    return row?.kind === 'expense' ? 'expense' : 'saving';
-  }
-
-  /**
-   * Highlight every row paired with this one. No-ops if neither the group nor
-   * the section changed, which keeps the cursor sliding within a group from
-   * re-rendering.
+   * Highlight every row paired with this one. No-ops if the group is unchanged,
+   * which keeps the cursor sliding within a group from re-rendering.
    */
   private setHoverGroup(row: any | null): void {
     const next = row ? (this.groupOf.get(rowKeyOf(row)) ?? null) : null;
-    const nextSection = row ? BudgetOverviewView.sectionOf(row) : null;
-    if (this.hoverGroup === next && this.hoverSection === nextSection) return;
+    if (this.hoverGroup === next) return;
     this.hoverGroup = next;
-    this.hoverSection = nextSection;
     (this as any).requestUpdate?.();
   }
 
@@ -367,18 +364,6 @@ export class BudgetOverviewView extends Base {
     return [sel?.has(row.pot_key ?? row.flow_key) ? 'selected' : '', extra, grp != null && grp === this.hoverGroup ? 'hover-acct' : '']
       .filter(Boolean)
       .join(' ');
-  }
-
-  /** The hover hint, but only when the cursor is in one of `sections`. */
-  private sectionHint(sections: ('saving' | 'expense' | 'move')[]): unknown {
-    if (this.hoverSection == null || !sections.includes(this.hoverSection)) return nothing;
-    return this.hoverHint();
-  }
-
-  /** Wraps the hint in its bar, or renders nothing when not hovering. */
-  private sectionHintHtml(...sections: ('saving' | 'expense' | 'move')[]): unknown {
-    const hint = this.sectionHint(sections);
-    return hint === nothing ? '' : html`<div class="hint-bar">${hint}</div>`;
   }
 
   private pruneSel(set: Set<string>, validKeys: string[]): void {
@@ -488,6 +473,96 @@ export class BudgetOverviewView extends Base {
     </div>`;
   }
 
+  /**
+   * The hover hint: the pairing's full summary — planned vs moved.
+   *
+   * Both the plans bar and the moves bar render this same line. A pairing
+   * spans the two areas, so whichever one you are pointing at, both sides of
+   * the equation belong in view.
+   *
+   * The bar is always rendered at a fixed height, so filling it in on hover
+   * never reflows the tables.
+   */
+  private sectionHint(): unknown {
+    const idle = html`<span class="idle">Hover a row to see its pot / line &harr; move pairing</span>`;
+    if (this.hoverGroup == null) return idle;
+    const g = this.groups[this.hoverGroup];
+    if (!g) return idle;
+    const n = g.pots.length + g.moves.length;
+    if (n === 0) return idle;
+    const acct = resolveAccountLabel(this.accountLabels, g.pots[0]?.account_id ?? g.moves[0]?.account_id);
+    const rows = `${n} row${n === 1 ? '' : 's'}`;
+
+    if (g.pots.length && g.moves.length) {
+      const planned = g.pots.reduce((t, p) => t + Number(p.weekly_amount || 0), 0);
+      const moved = g.moves.reduce((t, f) => t + Number(f.weekly_amount || 0), 0);
+      const ok = planned === moved;
+      return html`<span class="acct">${acct ?? 'Unassigned'}</span>
+        <span class="rows">${rows}</span>
+        <span>planned <b>${BudgetOverviewView.aud(planned)}</b></span>
+        <span>moved <b>${BudgetOverviewView.aud(moved)}</b></span>
+        <span class=${ok ? 'ok' : 'warn'}>${ok ? 'balanced' : `off by ${BudgetOverviewView.aud(Math.abs(planned - moved))}`}</span>
+        <span class="spacer"></span>`;
+    }
+
+    // One-sided group: there is nothing to compare against, so say so.
+    const onlyPots = g.pots.length > 0;
+    const sum = (onlyPots ? g.pots : g.moves).reduce((t, r) => t + Number(r.weekly_amount || 0), 0);
+    return html`<span class="acct">${acct ?? 'Unassigned'}</span>
+      <span class="rows">${rows}</span>
+      <span>${onlyPots ? 'planned' : 'moved'} <b>${BudgetOverviewView.aud(sum)}</b></span>
+      <span class="warn">no ${onlyPots ? 'move funds this' : 'pot funds this'}</span>
+      <span class="spacer"></span>`;
+  }
+
+  /** The hover hint bar; always present, never reflows. */
+  private sectionHintHtml(): unknown {
+    return html`<div class="hint-bar">${this.sectionHint()}</div>`;
+  }
+
+  /** Plan trace body: item filter, one page of rows, and the pager. */
+  private traceHtml(): unknown {
+    const filtered = filterTrace(this.trace, this.traceItem);
+    const pages = pageCount(filtered.length, TRACE_PAGE_SIZE);
+    // Re-clamp every render: filtering or archiving can shrink the list under
+    // the current page, which would otherwise render an empty table.
+    this.tracePage = clampPage(this.tracePage, filtered.length, TRACE_PAGE_SIZE);
+    const rows = pageSlice(filtered, this.tracePage, TRACE_PAGE_SIZE);
+    const setPage = (p: number) => {
+      this.tracePage = p;
+      (this as any).requestUpdate?.();
+    };
+    const win = pageWindow(this.tracePage, pages);
+
+    return html`<div class="trace-bar">
+        <label class="trace-filter">Item
+          <select @change=${(e: Event) => { this.traceItem = (e.target as HTMLSelectElement).value; this.tracePage = 1; (this as any).requestUpdate?.(); }}>
+            <option value="" ?selected=${this.traceItem === ''}>All items</option>
+            ${this.traceItems.map((it) => html`<option value=${it} ?selected=${this.traceItem === it}>${it}</option>`)}
+          </select>
+        </label>
+        <span class="trace-count">${filtered.length} row${filtered.length === 1 ? '' : 's'}${this.traceItem ? ` for ${this.traceItem}` : ''}</span>
+      </div>
+      <div class="table-wrap"><table class="hist-table">
+        <thead><tr><th>Item</th><th class="num">Weekly</th><th>From</th><th>To</th><th>Note</th></tr></thead>
+        <tbody>${rows.length
+          ? rows.map((r: any) => html`<tr class="trace">
+              <td>${r.label}</td><td class="num">${BudgetOverviewView.aud(r.weekly_amount)}</td>
+              <td>${r.effective_from}</td><td>${r.effective_to}</td><td>${r.notes ?? ''}</td>
+            </tr>`)
+          : html`<tr><td colspan="5" class="trace-empty">No closed rows${this.traceItem ? ` for ${this.traceItem}` : ''}</td></tr>`}
+        </tbody>
+      </table></div>
+      ${pages > 1
+        ? html`<div class="pager">
+            <button class="btn-link" ?disabled=${this.tracePage <= 1} @click=${() => setPage(this.tracePage - 1)}>‹ Prev</button>
+            ${win.map((p) => html`<button class="btn-link page-num ${p === this.tracePage ? 'on' : ''} ${isPageGap(win, p) ? 'gap' : ''}" @click=${() => setPage(p)}>${p}</button>`)}
+            <button class="btn-link" ?disabled=${this.tracePage >= pages} @click=${() => setPage(this.tracePage + 1)}>Next ›</button>
+            <span class="page-of">Page ${this.tracePage} of ${pages}</span>
+          </div>`
+        : ''}`;
+  }
+
   override render(): unknown {
     if (typeof HTMLElement === 'undefined') return html``;
     // Once per render: groups, the mismatch set and the hover map for all tables.
@@ -543,11 +618,11 @@ export class BudgetOverviewView extends Base {
           </div>
         </div>
         <div class="two-col" style="order:${this.sectionIndex('plans')}">
-        ${this.sectionHintHtml('saving', 'expense')}
+        ${this.sectionHintHtml()}
         ${this.summaryHtml('Savings pots', 'Pot', savings, this.showSavings, () => { this.showSavings = !this.showSavings; (this as any).requestUpdate?.(); }, this.selSavings, 'pot-edit-request', 'pot-archive-request', 'pot-archive-bulk', 'savings')}
         ${this.summaryHtml('Expense lines', 'Line', expenses, this.showExpenses, () => { this.showExpenses = !this.showExpenses; (this as any).requestUpdate?.(); }, this.selExpenses, 'pot-edit-request', 'pot-archive-request', 'pot-archive-bulk', 'expenses')}
         </div>
-        <div style="order:${this.sectionIndex('moves')}">${this.sectionHintHtml('move')}${this.movesHtml()}</div>
+        <div style="order:${this.sectionIndex('moves')}">${this.sectionHintHtml()}${this.movesHtml()}</div>
         ${this.trace.length ? html`<div class="section" style="order:${this.sectionIndex('trace')}">
           <button class="group-head ${this.showTrace ? 'open' : ''}" @click=${() => { this.showTrace = !this.showTrace; (this as any).requestUpdate?.(); }} aria-expanded=${this.showTrace ? 'true' : 'false'}>
             <span class="chev"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
@@ -555,13 +630,7 @@ export class BudgetOverviewView extends Base {
             <span class="section-badge">${this.trace.length}</span>
             <span class="sum">Closed history rows</span>
           </button>
-          ${this.showTrace ? html`<div class="table-wrap"><table class="hist-table">
-            <thead><tr><th>Item</th><th class="num">Weekly</th><th>From</th><th>To</th><th>Note</th></tr></thead>
-            <tbody>${this.trace.map((r: any) => html`<tr class="trace">
-              <td>${r.label}</td><td class="num">${BudgetOverviewView.aud(r.weekly_amount)}</td>
-              <td>${r.effective_from}</td><td>${r.effective_to}</td><td>${r.notes ?? ''}</td>
-            </tr>`)}</tbody>
-          </table></div>` : ''}
+          ${this.showTrace ? this.traceHtml() : ''}
         </div>` : ''}
         </div>
       </div></div>

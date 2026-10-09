@@ -9,5 +9,5 @@
     "lib": ["ES2022"],
     "paths": { "finance": ["./src/finance.d.ts"], "finance-logger": ["./src/vendor/logger.ts"] }
   },
-  "include": ["src/dao", "src/services", "src/mock", "src/ui/row-pairing.ts"]
+  "include": ["src/dao", "src/services", "src/mock", "src/ui/row-pairing.ts", "src/ui/trace-paging.ts"]
 }
