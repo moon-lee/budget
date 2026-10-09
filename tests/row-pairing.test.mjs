@@ -1,6 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { computePairingGroups } from '../build/test/ui/row-pairing.js';
+import {
+  computePairingGroups,
+  mismatchedRowKeys,
+  rowKeyOf,
+} from '../build/test/ui/row-pairing.js';
 
 const pot = (pot_key, label, weekly_amount, account_id) => ({
   pot_key,
@@ -153,5 +157,84 @@ describe('computePairingGroups', () => {
 
   it('returns nothing for empty input', () => {
     assert.deepEqual(computePairingGroups([], []), []);
+  });
+});
+
+describe('rowKeyOf', () => {
+  it('namespaces pots and flows so keys never collide', () => {
+    assert.equal(rowKeyOf({ pot_key: 'x' }), 'p:x');
+    assert.equal(rowKeyOf({ flow_key: 'x' }), 'f:x');
+    assert.notEqual(rowKeyOf({ pot_key: 'x' }), rowKeyOf({ flow_key: 'x' }));
+  });
+});
+
+describe('mismatchedRowKeys', () => {
+  it('marks both rows of an unbalanced 1:1 group', () => {
+    const g = computePairingGroups(
+      [pot('a', 'Emergency', 250, 1)],
+      [flow('f1', 'Emergency', 240, 1)],
+    );
+    assert.deepEqual([...mismatchedRowKeys(g)].sort(), ['f:f1', 'p:a']);
+  });
+
+  it('marks nothing when every group balances', () => {
+    const g = computePairingGroups(
+      [pot('a', 'Child', 10, 1), pot('b', 'Power Bill', 50, 1)],
+      [flow('f1', 'Child', 10, 1), flow('f2', 'Bill-Big4', 50, 1)],
+    );
+    assert.deepEqual([...mismatchedRowKeys(g)], []);
+  });
+
+  it('leaves a balanced pair alone when a sibling group on the SAME account is off', () => {
+    // The regression that motivates group scope: Mortgage is 400 = 400 and must
+    // NOT be flagged just because Power Bill's group is short.
+    const g = computePairingGroups(
+      [
+        pot('mortgage', 'Mortgage', 400, 1),
+        pot('power', 'Power Bill', 60, 1),
+        pot('rego', 'Car Rego', 100, 1),
+      ],
+      [flow('m', 'Mortgage', 400, 1), flow('big4', 'Bill-Big4', 280, 1)],
+    );
+    const bad = mismatchedRowKeys(g);
+    assert.equal(
+      bad.has('p:mortgage'),
+      false,
+      'balanced Mortgage pair must stay clean',
+    );
+    assert.equal(bad.has('f:m'), false);
+    assert.equal(bad.has('p:power'), true, 'the short group is flagged');
+    assert.equal(bad.has('f:big4'), true);
+  });
+
+  it('does not flag one-sided (T4 undecidable) groups', () => {
+    // 2 pots, 2 moves, no name matches -> T4 singletons: nothing can be
+    // reconciled, so nothing should be gilded.
+    const g = computePairingGroups(
+      [pot('a', 'Alpha', 50, 1), pot('b', 'Beta', 30, 1)],
+      [flow('f1', 'One', 10, 1), flow('f2', 'Two', 20, 1)],
+    );
+    assert.equal(g.length, 4);
+    assert.ok(g.every((x) => x.pots.length === 0 || x.moves.length === 0));
+    assert.deepEqual([...mismatchedRowKeys(g)], []);
+  });
+
+  it('treats a one-cent gap as a mismatch (no tolerance)', () => {
+    const g = computePairingGroups(
+      [pot('a', 'X', 10, 1)],
+      [flow('f1', 'X', 10.01, 1)],
+    );
+    assert.equal(mismatchedRowKeys(g).size, 2);
+  });
+
+  it('marks every row of an unbalanced multi-pot group', () => {
+    const g = computePairingGroups(
+      [pot('a', 'Alpha', 50, 1), pot('b', 'Beta', 30, 1)],
+      [flow('f1', 'Bills', 70, 1)],
+    );
+    const bad = mismatchedRowKeys(g);
+    assert.equal(bad.size, 3);
+    for (const k of ['p:a', 'p:b', 'f:f1'])
+      assert.equal(bad.has(k), true, `${k} should be flagged`);
   });
 });

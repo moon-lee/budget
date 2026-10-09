@@ -105,3 +105,36 @@ export function computePairingGroups(
 
   return groups;
 }
+
+/** Stable key for a pot or flow row; pots and flows share one namespace. */
+export function rowKeyOf(row: any): string {
+  return row?.pot_key != null ? `p:${row.pot_key}` : `f:${row.flow_key}`;
+}
+
+const sum = (rows: any[]): number =>
+  Math.round(
+    rows.reduce((t, r) => t + Number(r?.weekly_amount || 0), 0) * 100,
+  ) / 100;
+
+/**
+ * Row keys whose pairing group does not balance.
+ *
+ * Deliberately group-scoped rather than account-scoped. A hub account can hold
+ * several independent groups, so an account-level rollup turns every row on the
+ * account gold when only one group is actually off - flagging pairs that are
+ * provably balanced. Group scope marks exactly the rows that cannot be
+ * reconciled.
+ *
+ * Groups with only one side are NOT reported: nothing funds them, or nothing
+ * funds the move, but that is not the same as a figure that disagrees. The
+ * hover hint says so explicitly; gilding them would be noise.
+ */
+export function mismatchedRowKeys(groups: PairingGroup[]): Set<string> {
+  const bad = new Set<string>();
+  for (const g of groups) {
+    if (!g.pots.length || !g.moves.length) continue;
+    if (sum(g.pots) === sum(g.moves)) continue;
+    for (const r of [...g.pots, ...g.moves]) bad.add(rowKeyOf(r));
+  }
+  return bad;
+}

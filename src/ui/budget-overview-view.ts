@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from 'lit';
 import { sharedStyles } from '../styles/shared-styles.js';
 import { accountById, resolveAccountLabel } from '../dao/accounts.js';
-import { computePairingGroups, type PairingGroup } from './row-pairing.js';
+import { computePairingGroups, mismatchedRowKeys, rowKeyOf, type PairingGroup } from './row-pairing.js';
 import { listPotHistory } from '../dao/pots.js';
 import { balanceCheck } from '../services/budget-service.js';
 import { listCurrentPots } from '../dao/pots.js';
@@ -118,8 +118,8 @@ export class BudgetOverviewView extends Base {
   private confirmKey: string | null = null;
   /** Bumped on every selection change so checkbox bindings re-apply. */
   private selRev = 0;
-  /** Mismatched account ids for the current render. Recomputed in render(). */
-  private bad: Set<number> = new Set();
+  /** Row keys whose pairing group does not balance. Recomputed in render(). */
+  private bad: Set<string> = new Set();
   /** Row key (p:<pot_key> / f:<flow_key>) -> pairing group index. */
   private groupOf = new Map<string, number>();
   /** Pairing groups, indexed the same as groupOf. */
@@ -280,19 +280,17 @@ export class BudgetOverviewView extends Base {
     this.bumpSel();
   }
 
-  /** Row key used by the pairing map. Pots and flows share one namespace. */
-  private static rowKey(row: any): string {
-    return row.pot_key != null ? `p:${row.pot_key}` : `f:${row.flow_key}`;
-  }
+  
 
-  /** Rebuild the pot/line <-> move pairing map for the current data. */
+  /** Rebuild the pot/line <-> move pairing map, and the rows that do not balance. */
   private buildPairing(): void {
     this.groupOf.clear();
     this.groups = computePairingGroups(this.pots, this.flows);
     this.groups.forEach((g, i) => {
-      for (const p of g.pots) this.groupOf.set(BudgetOverviewView.rowKey(p), i);
-      for (const f of g.moves) this.groupOf.set(BudgetOverviewView.rowKey(f), i);
+      for (const p of g.pots) this.groupOf.set(rowKeyOf(p), i);
+      for (const f of g.moves) this.groupOf.set(rowKeyOf(f), i);
     });
+    this.bad = mismatchedRowKeys(this.groups);
   }
 
   /**
@@ -339,7 +337,7 @@ export class BudgetOverviewView extends Base {
    * re-rendering.
    */
   private setHoverGroup(row: any | null): void {
-    const next = row ? (this.groupOf.get(BudgetOverviewView.rowKey(row)) ?? null) : null;
+    const next = row ? (this.groupOf.get(rowKeyOf(row)) ?? null) : null;
     const nextSection = row ? BudgetOverviewView.sectionOf(row) : null;
     if (this.hoverGroup === next && this.hoverSection === nextSection) return;
     this.hoverGroup = next;
@@ -358,14 +356,14 @@ export class BudgetOverviewView extends Base {
       // Unpaired rows carry no data-grp at all, so this cannot collide with
       // group 0 the way a data-grp="" sentinel would.
       const toGrp = toRow.getAttribute('data-grp');
-      if (toGrp != null && Number(toGrp) === this.groupOf.get(BudgetOverviewView.rowKey(row))) return;
+      if (toGrp != null && Number(toGrp) === this.groupOf.get(rowKeyOf(row))) return;
     }
     this.setHoverGroup(null);
   }
 
   /** Class list + hover handlers shared by the pot/line and move rows. */
   private rowAttrs(row: any, sel: Set<string> | undefined, extra: string): string {
-    const grp = this.groupOf.get(BudgetOverviewView.rowKey(row));
+    const grp = this.groupOf.get(rowKeyOf(row));
     return [sel?.has(row.pot_key ?? row.flow_key) ? 'selected' : '', extra, grp != null && grp === this.hoverGroup ? 'hover-acct' : '']
       .filter(Boolean)
       .join(' ');
@@ -429,12 +427,12 @@ export class BudgetOverviewView extends Base {
     </div>`;
   }
 
-  private rowHtml(p: any, sel?: Set<string>, bad?: Set<number>) {
+  private rowHtml(p: any, sel?: Set<string>, bad?: Set<string>) {
     const acct = resolveAccountLabel(this.accountLabels, p.account_id);
     const checked = sel?.has(p.pot_key) ?? false;
-    const mism = !!bad?.has(Number(p.account_id));
+    const mism = !!bad?.has(rowKeyOf(p));
     const classes = this.rowAttrs(p, sel, mism ? 'mismatch' : '');
-    const grp = this.groupOf.get(BudgetOverviewView.rowKey(p));
+    const grp = this.groupOf.get(rowKeyOf(p));
     return html`<tr class=${classes} data-grp=${grp == null ? nothing : grp}
       @mouseenter=${() => this.setHoverGroup(p)} @mouseleave=${(e: MouseEvent) => this.onRowLeave(e, p)}>
       ${sel ? html`<td><input type="checkbox" ?checked=${checked} .checked=${checked} @change=${() => this.toggleSel(sel, p.pot_key)} aria-label="Select ${p.label}"></td>` : ''}
@@ -443,11 +441,11 @@ export class BudgetOverviewView extends Base {
     </tr>`;
   }
 
-  private moveRowHtml(f: any, bad?: Set<number>) {
+  private moveRowHtml(f: any, bad?: Set<string>) {
     const checked = this.selMoves.has(f.flow_key);
-    const mism = !!bad?.has(Number(f.account_id));
+    const mism = !!bad?.has(rowKeyOf(f));
     const classes = this.rowAttrs(f, this.selMoves, mism ? 'mismatch' : '');
-    const grp = this.groupOf.get(BudgetOverviewView.rowKey(f));
+    const grp = this.groupOf.get(rowKeyOf(f));
     return html`<tr class=${classes} data-grp=${grp == null ? nothing : grp}
       @mouseenter=${() => this.setHoverGroup(f)} @mouseleave=${(e: MouseEvent) => this.onRowLeave(e, f)}>
       <td><input type="checkbox" ?checked=${checked} .checked=${checked} @change=${() => this.toggleSel(this.selMoves, f.flow_key)} aria-label="Select ${f.label}"></td>
@@ -490,30 +488,9 @@ export class BudgetOverviewView extends Base {
     </div>`;
   }
 
-  /** Account ids whose planned (pots) total differs from moved (flows) total. */
-  private mismatchedAccounts(): Set<number> {
-    const planned = new Map<number, number>();
-    for (const p of this.pots) {
-      if (p.account_id == null) continue;
-      planned.set(Number(p.account_id), (planned.get(Number(p.account_id)) ?? 0) + Number(p.weekly_amount || 0));
-    }
-    const moved = new Map<number, number>();
-    for (const f of this.flows) {
-      if (f.account_id == null) continue;
-      moved.set(Number(f.account_id), (moved.get(Number(f.account_id)) ?? 0) + Number(f.weekly_amount || 0));
-    }
-    const bad = new Set<number>();
-    for (const id of new Set<number>([...planned.keys(), ...moved.keys()])) {
-      const gap = Math.round(((planned.get(id) ?? 0) - (moved.get(id) ?? 0)) * 100) / 100;
-      if (gap !== 0) bad.add(id);
-    }
-    return bad;
-  }
-
   override render(): unknown {
     if (typeof HTMLElement === 'undefined') return html``;
-    // Once per render: the pot/line tables and the moves table all read this.
-    this.bad = this.mismatchedAccounts();
+    // Once per render: groups, the mismatch set and the hover map for all tables.
     this.buildPairing();
     const b = this.balance ?? { income_weekly: 0, savings_weekly: 0, expenses_weekly: 0, balance_weekly: 0, moves_weekly: 0, moves_gap_weekly: 0 };
     const balanced = Number(b.balance_weekly) >= 0;
