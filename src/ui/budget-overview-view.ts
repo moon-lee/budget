@@ -55,6 +55,10 @@ export class BudgetOverviewView extends Base {
     .bad{color:var(--ff-danger,#f48771)}
     .warn{color:var(--ff-warning-text,#ffd866)}
     .tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 9px;border-radius:10px;border:1px solid var(--ff-border,#3e3e3e);margin-left:8px}
+    /* Live/edited source badge, matching taxflow's .pill.open - a 999px pill
+       with teal text and border for the live state. */
+    .tag.live{color:var(--ff-success,#4ec9b0);border-color:var(--ff-success,#4ec9b0)}
+    .tag.manual{color:var(--ff-text-muted,#858585)}
     .trace{font-size:var(--ff-font-sm);opacity:.75}
     .section-header .spacer{flex:1}
     .group-head{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;margin:0 0 8px;background:var(--ff-bg-subpanel,#2a2a2a);border:1px solid var(--ff-border,#3e3e3e);border-radius:8px;color:var(--ff-text,#d4d4d4);font-size:var(--ff-font-base);cursor:pointer;text-align:left}
@@ -203,10 +207,12 @@ export class BudgetOverviewView extends Base {
       if (Number.isFinite(hostLive) && hostLive > 0) {
         this.incomeManual = false;
       } else {
+        // Probe the SAME source incomeWeekly uses (getLatestNet), or the
+        // "Live" badge would disagree with the figure shown.
         try {
-          const stats = (await this.finance.services?.invoke?.('pay', 'getPayslipStats')) as any;
-          const avg = Number(stats?.avgNet ?? NaN);
-          if (Number.isFinite(avg) && avg > 0) this.incomeManual = false;
+          const latest = (await this.finance.services?.invoke?.('pay', 'getLatestNet')) as any;
+          const net = Number(latest?.net ?? NaN);
+          if (Number.isFinite(net) && net > 0) this.incomeManual = false;
         } catch { /* manual fallback */ }
       }
       // latest-net reference: Host value wins; else probe `pay` (Host context
@@ -616,7 +622,9 @@ export class BudgetOverviewView extends Base {
         ${this.error ? html`<p class="field-error">Error: ${this.error}</p>` : ''}
         <div class="order-stack">
         <div class="section" style="order:${this.sectionIndex('income')}"><div class="section-header"><h3 class="section-title">Income & balance</h3>
-          ${this.incomeManual ? html`<span class="tag">Edited by hand</span>` : html`<span class="tag">Live from Salary</span>`}</div>
+          ${this.incomeManual
+          ? html`<span class="tag manual">Edited by hand</span>`
+          : html`<span class="tag live">Live</span>`}</div>
           <div class="cards">
             <div class="card"><div class="k">In / week</div><div class="v">${BudgetOverviewView.aud(b.income_weekly)} <span class="s">Yr ≈ ${BudgetOverviewView.aud(Number(b.income_weekly) * 52)}</span></div>
               ${this.latestNetLine() ? html`<div class="s">${this.latestNetLine()}</div>` : ''}

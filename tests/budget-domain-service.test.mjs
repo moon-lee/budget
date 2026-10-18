@@ -4,7 +4,12 @@ import {
   createBudgetDomainService,
   keyOf,
 } from '../build/test/services/budget-domain-service.js';
-import { potYearly } from '../build/test/services/budget-service.js';
+import {
+  incomeWeekly,
+  potYearly,
+  standardWeeklyGross,
+  standardWeeklyNet,
+} from '../build/test/services/budget-service.js';
 
 /**
  * `finance.services.invoke` marshals `params` positionally before calling a
@@ -215,5 +220,318 @@ describe('budget service: totals', () => {
 describe('budget service: regression on the underlying maths', () => {
   it('potYearly still ignores archived rows at the service layer', async () => {
     assert.equal(await potYearly(finance, 'old-pot'), null);
+  });
+});
+
+describe('incomeWeekly: which Salary figure is the run-rate', () => {
+  const withPay = (getLatestNet, getPayslipStats) => ({
+    db: { table: () => ({ find: async () => [], findOne: async () => null }) },
+    services: {
+      invoke: async (_svc, method) => {
+        if (method === 'getLatestNet') return getLatestNet;
+        if (method === 'getPayslipStats') return getPayslipStats;
+        return null;
+      },
+    },
+  });
+
+  it('uses the LATEST payslip net, not the all-time average', () => {
+    // A pay rise: the average is dragged down by old payslips.
+    return incomeWeekly(
+      withPay(
+        { net: 900, pay_date: '2026-10-01' },
+        { avgNet: 820, totalCount: 24 },
+      ),
+    ).then((got) => {
+      assert.equal(got, 900);
+    });
+  });
+
+  it('never uses avgNet AS the run-rate, only as the tax ratio', () => {
+    // getPayslipStats is consulted now - it supplies the net/gross ratio the
+    // standard week is taxed at - but its average is never the answer itself.
+    // With no usable rate row, the latest payslip must win over the average.
+    const called = [];
+    const f = {
+      db: {
+        table: () => ({ find: async () => [], findOne: async () => null }),
+      },
+      services: {
+        invoke: async (_s, method) => {
+          called.push(method);
+          if (method === 'getCurrentRate')
+            return { standard_hours_per_week: 38, base_hourly_rate: 0 };
+          if (method === 'getPayslipStats')
+            return { avgGross: 1000, avgNet: 700 };
+          return method === 'getLatestNet'
+            ? { net: 500, pay_date: '2026-10-01' }
+            : null;
+        },
+      },
+    };
+    return incomeWeekly(f).then((got) => {
+      assert.equal(got, 500, 'latest net, not the 700 average');
+      assert.equal(
+        called.includes('getPayslipStats'),
+        true,
+        'the ratio source is still consulted',
+      );
+    });
+  });
+
+  it('falls back to the manual row when there is no payslip', async () => {
+    const f = {
+      db: {
+        table: () => ({
+          find: async () => [
+            {
+              id: 1,
+              finance_year: '2026-2027',
+              weekly_amount: 700,
+              source: 'manual',
+            },
+          ],
+          findOne: async () => ({
+            id: 1,
+            finance_year: '2026-2027',
+            weekly_amount: 700,
+            source: 'manual',
+          }),
+        }),
+      },
+      services: { invoke: async () => null },
+    };
+    assert.equal(await incomeWeekly(f, '2026-2027'), 700);
+  });
+
+  it('returns 0 when neither source has a figure', async () => {
+    const f = {
+      db: {
+        table: () => ({ find: async () => [], findOne: async () => null }),
+      },
+      services: { invoke: async () => null },
+    };
+    assert.equal(await incomeWeekly(f), 0);
+  });
+
+  it('ignores a non-positive or non-finite latest net', async () => {
+    for (const net of [0, -5, NaN]) {
+      const f = {
+        db: {
+          table: () => ({ find: async () => [], findOne: async () => null }),
+        },
+        services: { invoke: async () => ({ net, pay_date: '2026-10-01' }) },
+      };
+      assert.equal(await incomeWeekly(f), 0, `net=${net} should not be used`);
+    }
+  });
+
+  it('survives the pay service throwing', async () => {
+    const f = {
+      db: {
+        table: () => ({ find: async () => [], findOne: async () => null }),
+      },
+      services: {
+        invoke: async () => {
+          throw new Error('no salary ext');
+        },
+      },
+    };
+    assert.equal(await incomeWeekly(f), 0);
+  });
+});
+
+describe('standardWeeklyGross', () => {
+  const rate = {
+    standard_hours_per_week: 38,
+    base_hourly_rate: 40,
+    shift_allowance_hours_per_week: 0,
+    shift_allowance_multiplier: 0,
+  };
+
+  it('multiplies standard hours by the base rate', () => {
+    assert.equal(standardWeeklyGross(rate), 1520);
+  });
+
+  it('adds the shift allowance at its multiplier', () => {
+    assert.equal(
+      standardWeeklyGross({
+        ...rate,
+        shift_allowance_hours_per_week: 4,
+        shift_allowance_multiplier: 0.15,
+      }),
+      1544,
+    );
+  });
+
+  it('returns 0 for a rate that cannot produce a positive week', () => {
+    assert.equal(
+      standardWeeklyGross({ ...rate, base_hourly_rate: 0 }),
+      0,
+      'un-seeded default row',
+    );
+    assert.equal(
+      standardWeeklyGross({ ...rate, standard_hours_per_week: 0 }),
+      0,
+    );
+    assert.equal(standardWeeklyGross(null), 0);
+    assert.equal(standardWeeklyGross({}), 0);
+  });
+
+  it('ignores a malformed shift allowance rather than producing NaN', () => {
+    const g = standardWeeklyGross({
+      ...rate,
+      shift_allowance_hours_per_week: 4,
+      shift_allowance_multiplier: NaN,
+    });
+    assert.equal(g, 1520);
+  });
+});
+
+describe('standardWeeklyNet', () => {
+  const rate = { standard_hours_per_week: 38, base_hourly_rate: 40 };
+
+  it('applies the payslip net-to-gross ratio to the standard week', () => {
+    // 38 x 40 = 1520 standard gross; payslips show 70% net of gross.
+    assert.equal(standardWeeklyNet(rate, 2000, 1400), 1064);
+  });
+
+  it('tracks a pay rise immediately, unlike an all-time average', () => {
+    // Old payslips average low, but the ratio is what matters, not the level.
+    const net = standardWeeklyNet(rate, 1500, 1000);
+    assert.equal(net, 1013.33);
+  });
+
+  it('returns 0 when the rate is unusable', () => {
+    assert.equal(standardWeeklyNet({ base_hourly_rate: 0 }, 2000, 1400), 0);
+  });
+
+  it('returns 0 when the ratio cannot be derived', () => {
+    assert.equal(standardWeeklyNet(rate, 0, 1400), 0, 'zero gross');
+    assert.equal(standardWeeklyNet(rate, NaN, 1400), 0);
+    assert.equal(standardWeeklyNet(rate, 2000, null), 0);
+  });
+
+  it('rejects an impossible ratio rather than inflating income', () => {
+    assert.equal(standardWeeklyNet(rate, 1000, 1200), 0, 'net above gross');
+    assert.equal(standardWeeklyNet(rate, 1000, -50), 0, 'negative net');
+  });
+});
+
+describe('incomeWeekly: preference order', () => {
+  const financeWith = (handlers, incomeRows = []) => ({
+    db: {
+      table: () => ({
+        find: async () => incomeRows,
+        findOne: async () => incomeRows[0] ?? null,
+      }),
+    },
+    services: {
+      invoke: async (_s, method) =>
+        method in handlers ? handlers[method] : null,
+    },
+  });
+
+  it('prefers standard net over the latest payslip', async () => {
+    const f = financeWith({
+      getCurrentRate: { standard_hours_per_week: 38, base_hourly_rate: 40 },
+      getPayslipStats: { avgGross: 2000, avgNet: 1400 },
+      getLatestNet: { net: 999, pay_date: '2026-10-01' },
+    });
+    assert.equal(await incomeWeekly(f), 1064);
+  });
+
+  it('falls back to the latest payslip when the rate is unusable', async () => {
+    const f = financeWith({
+      getCurrentRate: { standard_hours_per_week: 38, base_hourly_rate: 0 },
+      getPayslipStats: { avgGross: 2000, avgNet: 1400 },
+      getLatestNet: { net: 900, pay_date: '2026-10-01' },
+    });
+    assert.equal(await incomeWeekly(f), 900);
+  });
+
+  it('falls back to the manual row when there are no payslips', async () => {
+    const f = financeWith({}, [
+      {
+        id: 1,
+        finance_year: '2026-2027',
+        weekly_amount: 700,
+        source: 'manual',
+      },
+    ]);
+    assert.equal(await incomeWeekly(f, '2026-2027'), 700);
+  });
+
+  it('returns 0 when nothing is available', async () => {
+    assert.equal(await incomeWeekly(financeWith({})), 0);
+  });
+});
+
+describe('incomeWeekly: prefers Salary getStandardWeeklyNet', () => {
+  const withPay = (handlers, incomeRows = []) => ({
+    db: {
+      table: () => ({
+        find: async () => incomeRows,
+        findOne: async () => incomeRows[0] ?? null,
+      }),
+    },
+    services: {
+      invoke: async (_s, method) =>
+        method in handlers ? handlers[method] : null,
+    },
+  });
+
+  it('uses the Salary normal-week figure when the method exists', async () => {
+    const f = withPay({
+      getStandardWeeklyNet: {
+        net: 1310.6,
+        basis: { standard_gross: 1660.6, standard_weeks_used: 2 },
+      },
+      getCurrentRate: { standard_hours_per_week: 38, base_hourly_rate: 38 },
+      getPayslipStats: { avgGross: 1700, avgNet: 1100 },
+      getLatestNet: { net: 900, pay_date: '2026-09-24' },
+    });
+    assert.equal(await incomeWeekly(f), 1310.6);
+  });
+
+  it('skips straight to the local formula when the method is absent', async () => {
+    // An older Salary: unknown method returns null, so the local path runs.
+    const f = withPay({
+      getStandardWeeklyNet: null,
+      getCurrentRate: { standard_hours_per_week: 38, base_hourly_rate: 40 },
+      getPayslipStats: { avgGross: 2000, avgNet: 1400 },
+      getLatestNet: { net: 900, pay_date: '2026-09-24' },
+    });
+    assert.equal(await incomeWeekly(f), 1064);
+  });
+
+  it('falls back to the latest payslip when Salary cannot determine it', async () => {
+    const f = withPay({
+      getStandardWeeklyNet: null, // e.g. no normal weeks in the rate period
+      getCurrentRate: { standard_hours_per_week: 38, base_hourly_rate: 0 },
+      getPayslipStats: { avgGross: 2000, avgNet: 1400 },
+      getLatestNet: { net: 900, pay_date: '2026-09-24' },
+    });
+    assert.equal(await incomeWeekly(f), 900);
+  });
+
+  it('survives the new method throwing', async () => {
+    const f = withPay({
+      getStandardWeeklyNet: () => {
+        throw new Error('boom');
+      },
+      getCurrentRate: { standard_hours_per_week: 38, base_hourly_rate: 40 },
+      getPayslipStats: { avgGross: 2000, avgNet: 1400 },
+    });
+    assert.equal(await incomeWeekly(f), 1064);
+  });
+
+  it('ignores a non-positive figure from the new method', async () => {
+    const f = withPay({
+      getStandardWeeklyNet: { net: 0 },
+      getCurrentRate: { standard_hours_per_week: 38, base_hourly_rate: 40 },
+      getPayslipStats: { avgGross: 2000, avgNet: 1400 },
+    });
+    assert.equal(await incomeWeekly(f), 1064, 'must not stop at 0');
   });
 });

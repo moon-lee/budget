@@ -90,23 +90,111 @@ function round2(n: number): number {
 }
 
 /**
- * Weekly income run-rate (§6): live `pay.getPayslipStats().avgNet` when the
- * Salary extension is present, else the manual `budget_income` row.
+ * Standard gross for a week, from the current pay rate.
+ *
+ * Mirrors salary-history's `standardGrossForRate`: standard hours at the base
+ * rate, plus any shift allowance. Overtime is excluded - a budget plans a
+ * normal week, not a week with overtime.
+ *
+ * Returns 0 for a rate that cannot produce a positive week (e.g. the
+ * un-seeded default row, whose `base_hourly_rate` is 0), so callers can fall
+ * back rather than trust a zero baseline.
+ */
+export function standardWeeklyGross(rate: any): number {
+  const hours = Number(rate?.standard_hours_per_week ?? 0);
+  const base = Number(rate?.base_hourly_rate ?? 0);
+  if (!Number.isFinite(hours) || !Number.isFinite(base) || hours <= 0 || base <= 0) return 0;
+  const shiftHours = Number(rate?.shift_allowance_hours_per_week ?? 0);
+  const shiftMult = Number(rate?.shift_allowance_multiplier ?? 0);
+  const shift =
+    Number.isFinite(shiftHours) && Number.isFinite(shiftMult) && shiftHours > 0 && shiftMult > 0
+      ? shiftHours * base * shiftMult
+      : 0;
+  return round2(hours * base + shift);
+}
+
+/**
+ * Standard weekly NET: standard gross at the current rate, less tax at the
+ * net-to-gross ratio your real payslips actually show.
+ *
+ * The ratio comes from the payslips rather than a tax table because the only
+ * gross-to-net helper Salary exposes (`calculateNetFromGross`) is a documented
+ * placeholder that ignores HELP debt, salary sacrifice and other deductions.
+ * Your own payslips already have all of that applied, so their ratio is the
+ * honest one to reuse - and it self-corrects when your deductions change.
+ *
+ * Returns 0 when either input is missing or unusable, so the caller can fall
+ * back to the latest payslip net.
+ */
+export function standardWeeklyNet(rate: any, avgGross: unknown, avgNet: unknown): number {
+  const gross = standardWeeklyGross(rate);
+  if (gross <= 0) return 0;
+  const g = Number(avgGross);
+  const n = Number(avgNet);
+  if (!Number.isFinite(g) || !Number.isFinite(n) || g <= 0) return 0;
+  const ratio = n / g;
+  // A net above gross is impossible; a negative or zero net is not a run-rate.
+  if (!Number.isFinite(ratio) || ratio <= 0 || ratio > 1) return 0;
+  return round2(gross * ratio);
+}
+
+/**
+ * Weekly income run-rate (§6).
+ *
+ * Preference order:
+ *   1. `pay.getStandardWeeklyNet()` — Salary's normal-week take-home at the
+ *      current rate. Forward-looking: a pay rise shows up immediately, and
+ *      overtime / public-holiday / leave weeks are excluded from the tax ratio.
+ *   2. the same maths computed locally from `getCurrentRate()` and
+ *      `getPayslipStats()`, so an older Salary without the method does not
+ *      silently regress the figure.
+ *   3. the latest payslip net.
+ *   4. the manual `budget_income` row.
+ *
+ * `getPayslipStats().avgNet` alone is NEVER the run-rate: it averages every
+ * payslip ever recorded, so it drifts with old pay rates and is skewed by
+ * whichever odd weeks are in the history.
+ *
  * `financeYear` selects the manual row; without one the latest manual row wins.
  */
 export async function incomeWeekly(finance: any, financeYear?: string): Promise<number> {
-  try {
-    const stats = (await finance.services?.invoke?.('pay', 'getPayslipStats')) as {
-      avgNet?: unknown;
-    } | null;
-    const avg = Number(stats?.avgNet ?? NaN);
-    if (Number.isFinite(avg) && avg > 0) return Math.round(avg * 100) / 100;
-  } catch {
-    /* fall through to manual */
+  const invoke = finance.services?.invoke;
+  if (typeof invoke === 'function') {
+    // 1. Salary's own implementation, when it exposes one.
+    try {
+      const fromPay = (await invoke('pay', 'getStandardWeeklyNet')) as { net?: unknown } | null;
+      const net = Number(fromPay?.net ?? NaN);
+      if (Number.isFinite(net) && net > 0) return round2(net);
+    } catch {
+      /* older Salary, or the service is unavailable */
+    }
+    // 2. Same formula, computed here for an older Salary.
+    try {
+      const [rate, stats] = await Promise.all([
+        invoke('pay', 'getCurrentRate'),
+        invoke('pay', 'getPayslipStats'),
+      ]);
+      const standard = standardWeeklyNet(
+        rate,
+        (stats as any)?.avgGross,
+        (stats as any)?.avgNet
+      );
+      if (standard > 0) return standard;
+    } catch {
+      /* fall through to the latest payslip */
+    }
+    // 3. Latest actual payslip.
+    try {
+      const latest = (await invoke('pay', 'getLatestNet')) as { net?: unknown } | null;
+      const net = Number(latest?.net ?? NaN);
+      if (Number.isFinite(net) && net > 0) return round2(net);
+    } catch {
+      /* fall through to manual */
+    }
   }
   try {
     const row = financeYear ? await getIncome(finance, financeYear) : await getLatestIncome(finance);
-    if (row) return Math.round(Number(row.weekly_amount || 0) * 100) / 100;
+    if (row) return round2(Number(row.weekly_amount || 0));
   } catch {
     /* no manual row */
   }
