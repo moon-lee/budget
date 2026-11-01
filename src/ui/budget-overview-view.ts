@@ -37,8 +37,10 @@ export class BudgetOverviewView extends Base {
     .hist-table tbody td.num{text-align:right;font-variant-numeric:tabular-nums}
     .hist-table tbody tr:nth-child(even){background:var(--ff-bg-subpanel,#2a2a2a)}
     .hist-table tbody tr:hover{background:var(--ff-bg-input-hover,#4a4a4a)}
-    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:4px}
-    .card{background:var(--ff-bg-subpanel,#2a2a2a);border:1px solid var(--ff-border,#3e3e3e);border-radius:8px;padding:12px 14px}
+    .section-body{padding:12px}
+    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+    .card{background:var(--ff-bg-input,#3c3c3c);border:1px solid var(--ff-border,#3e3e3e);border-radius:8px;padding:12px 16px;transition:background-color 120ms ease,border-color 120ms ease}
+    .card:hover{background:var(--ff-bg-input-hover,#4a4a4a);border-color:var(--ff-accent,#007acc)}
     .card .k{font-size:var(--ff-font-sm);color:var(--ff-text-muted,#858585);text-transform:uppercase;letter-spacing:.5px}
     .card .v{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
     .card .s{font-size:var(--ff-font-sm);opacity:.7}
@@ -625,6 +627,7 @@ export class BudgetOverviewView extends Base {
           ${this.incomeManual
           ? html`<span class="tag manual">Edited by hand</span>`
           : html`<span class="tag live">Live</span>`}</div>
+          <div class="section-body">
           <div class="cards">
             <div class="card"><div class="k">In / week</div><div class="v">${BudgetOverviewView.aud(b.income_weekly)} <span class="s">Yr ≈ ${BudgetOverviewView.aud(Number(b.income_weekly) * 52)}</span></div>
               ${this.latestNetLine() ? html`<div class="s">${this.latestNetLine()}</div>` : ''}
@@ -649,6 +652,7 @@ export class BudgetOverviewView extends Base {
               <div class="s">${balanced ? 'Balanced' : 'Over budget'}</div></div>
             <div class="card"><div class="k">Moves</div><div class="v ${reconciled ? 'ok' : 'warn'}">${BudgetOverviewView.aud(b.moves_weekly)}</div>
               <div class="s">${reconciled ? 'Matches planned out' : `${BudgetOverviewView.aud(Math.abs(gap))}/wk ${gap > 0 ? 'unallocated' : 'over-moved'}`}</div></div>
+          </div>
           </div>
         </div>
         <div class="two-col" style="order:${this.sectionIndex('plans')}">
